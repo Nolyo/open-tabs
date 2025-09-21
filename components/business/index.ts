@@ -1,0 +1,5 @@
+export { TabGroupManager } from './TabGroupManager'
+export { SearchManager } from './SearchManager'
+export { ImportExportManager } from './ImportExportManager'
+export { SettingsManager } from './SettingsManager'
+export { NotificationManager } from './NotificationManager'
