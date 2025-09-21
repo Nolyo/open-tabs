@@ -1,8 +1,8 @@
 import { useState } from 'react'
 
 export interface ImportExportData {
-  tabs: any[]
   groups: any[]
+  settings: any
   version: string
   exportedAt: string
 }
@@ -26,12 +26,12 @@ export function useImportExport(): UseImportExportReturn {
 
     try {
       const response = await chrome.runtime.sendMessage({
-        type: 'EXPORT_DATA',
+        action: 'EXPORT_DATA',
       })
 
       const data: ImportExportData = {
-        tabs: response.tabs || [],
         groups: response.groups || [],
+        settings: response.settings || {},
         version: '1.0',
         exportedAt: new Date().toISOString(),
       }
@@ -63,14 +63,18 @@ export function useImportExport(): UseImportExportReturn {
       const text = await file.text()
       const data = JSON.parse(text)
 
-      if (!data.tabs || !data.groups) {
+      if (!data.groups || !Array.isArray(data.groups)) {
         throw new Error('Format de fichier invalide')
       }
 
-      await chrome.runtime.sendMessage({
-        type: 'IMPORT_DATA',
+      const response = await chrome.runtime.sendMessage({
+        action: 'IMPORT_DATA',
         payload: data,
       })
+
+      if (response && response.error) {
+        throw new Error(response.error)
+      }
     } catch (err) {
       setError('Erreur lors de l&apos;importation des données')
       console.error('Import error:', err)

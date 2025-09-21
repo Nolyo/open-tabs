@@ -155,5 +155,53 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         .then(sendResponse)
         .catch(error => sendResponse({ error: error.message }))
       return true
+
+    case 'EXPORT_DATA':
+      exportData()
+        .then(sendResponse)
+        .catch(error => sendResponse({ error: error.message }))
+      return true
+
+    case 'IMPORT_DATA':
+      importData(request.payload)
+        .then(sendResponse)
+        .catch(error => sendResponse({ error: error.message }))
+      return true
   }
 })
+
+// Fonction pour exporter les données
+const exportData = async () => {
+  const groups = await storage.get<TabGroup[]>('groups') || []
+  const settings = await storage.get('settings') || {}
+
+  return {
+    groups,
+    settings,
+    exportedAt: new Date().toISOString(),
+    version: '1.0'
+  }
+}
+
+// Fonction pour importer les données
+const importData = async (data: any) => {
+  try {
+    // Valider les données
+    if (!data.groups || !Array.isArray(data.groups)) {
+      throw new Error('Format de données invalide: groupes manquants')
+    }
+
+    // Importer les groupes
+    await storage.set('groups', data.groups)
+
+    // Importer les settings s'ils existent
+    if (data.settings) {
+      await storage.set('settings', data.settings)
+    }
+
+    return { success: true, importedGroups: data.groups.length }
+  } catch (error) {
+    console.error('Import error:', error)
+    throw error
+  }
+}

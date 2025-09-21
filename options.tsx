@@ -191,6 +191,39 @@ function OptionsPage() {
     URL.revokeObjectURL(url)
   }
 
+  const handleImportJson = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+
+      // Valider les données
+      if (!data.groups || !Array.isArray(data.groups)) {
+        throw new Error('Format de fichier invalide')
+      }
+
+      // Importer les groupes via le background script
+      const response = await chrome.runtime.sendMessage({
+        action: 'IMPORT_DATA',
+        payload: data
+      })
+
+      if (response && response.error) {
+        throw new Error(response.error)
+      }
+
+      alert('Importation réussie !')
+      // La page se rafraîchira automatiquement grâce au hook useStorage
+    } catch (error) {
+      alert('Erreur lors de l\'importation : ' + error.message)
+    } finally {
+      // Réinitialiser l'input pour permettre de sélectionner le même fichier à nouveau
+      event.target.value = ''
+    }
+  }
+
   if (loading) {
     return (
       <div style={{
@@ -269,9 +302,9 @@ function OptionsPage() {
           }}
         >
           <option value="all">Toutes tailles</option>
-          <option value="small">Petit (≤5)</option>
+          <option value="small">Petit (&le;5)</option>
           <option value="medium">Moyen (6-15)</option>
-          <option value="large">Grand (>15)</option>
+          <option value="large">Grand (&gt;15)</option>
         </select>
 
         <select
@@ -333,6 +366,30 @@ function OptionsPage() {
           }}
         >
           Exporter JSON
+        </button>
+
+        <input
+          type="file"
+          accept=".json"
+          onChange={handleImportJson}
+          style={{ display: 'none' }}
+          id="import-json-input"
+        />
+        <button
+          onClick={() => document.getElementById('import-json-input')?.click()}
+          style={{
+            background: '#ea4335',
+            color: 'white',
+            border: '2px solid #ea4335',
+            padding: '10px 20px',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '16px',
+            fontWeight: 'bold',
+            marginLeft: '10px'
+          }}
+        >
+          📁 Importer JSON
         </button>
       </div>
 

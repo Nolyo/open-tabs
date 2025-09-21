@@ -362,6 +362,24 @@ const [sortBy, setSortBy] = useState<'name' | 'date' | 'url'>('date')
             {theme === 'light' ? '🌙' : '☀️'}
           </button>
           <button
+            onClick={() => chrome.runtime.openOptionsPage()}
+            style={{
+              background: 'var(--bg-secondary)',
+              color: 'var(--text-primary)',
+              border: '1px solid var(--border-primary)',
+              padding: '6px 8px',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+            title="Options et Import/Export"
+          >
+            ⚙️
+          </button>
+          <button
             onClick={() => setShowAdvanced(!showAdvanced)}
             style={{
               background: showAdvanced ? 'var(--accent-red)' : 'var(--bg-secondary)',
