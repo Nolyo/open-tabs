@@ -1,1480 +1,1384 @@
-import { useState, useEffect } from "react"
-import { useStorage } from "./hooks/useStorage"
-import { useTheme } from "./hooks/useTheme"
-import { Storage } from "@plasmohq/storage"
-import type { TabGroup } from "./types"
-import "./style.css"
+import { useEffect, useMemo, useState } from 'react'
+import { Storage } from '@plasmohq/storage'
+
+import {
+  PopupContainer,
+  PopupHeader,
+  PopupContent,
+  PopupFooter,
+} from '~/components/Popup'
+import { NotificationManager } from '~/components/business'
+import { Button } from '~/components/ui/Button'
+import { Input } from '~/components/ui/Input'
+import { LoadingSpinner } from '~/components/ui/LoadingSpinner'
+import { Modal } from '~/components/ui/Modal'
+import { SearchBar } from '~/components/ui/SearchBar'
+import { notificationService } from '~/hooks/services'
+import { useProfiles } from '~/hooks/useProfiles'
+import { useStorage } from '~/hooks/useStorage'
+import { useTheme } from '~/hooks/useTheme'
+import type { ProfileSummary, TabGroup } from '~/types'
+
+import './options.css'
+import './style.css'
+
+type OpenTab = {
+  id: number
+  url: string
+  title: string
+  favicon?: string
+}
+
+type ContextMenuPayload = {
+  url: string
+  title: string
+}
 
 const storage = new Storage()
-const GROUP_COLORS = [
-  '#808080', '#4285f4', '#ea4335', '#fbbc04', '#34a853',
-  '#ff6b9d', '#9c27b0', '#00bcd4', '#ff9800'
-]
+
+const GROUP_COLOR_OPTIONS = [
+  '#808080',
+  '#4285f4',
+  '#ea4335',
+  '#fbbc04',
+  '#34a853',
+  '#ff6b9d',
+  '#9c27b0',
+  '#00bcd4',
+  '#ff9800',
+] as const
 
 function IndexPopup() {
-  const { groups, loading, createGroup, addUrlToGroup, removeUrlFromGroup } = useStorage()
+  const {
+    groups,
+    loading: areGroupsLoading,
+    createGroup,
+    updateGroup,
+    deleteGroup,
+    addUrlToGroup,
+    removeUrlFromGroup,
+  } = useStorage()
+  const {
+    summaries,
+    profiles,
+    snapshot,
+    isLoading: areProfilesLoading,
+    isCapturing,
+    isSaving,
+    isOpening,
+    isDeleting,
+    error: profilesError,
+    captureCurrentState,
+    saveProfile,
+    deleteProfile,
+    openProfile,
+    clearError,
+    setSnapshot,
+  } = useProfiles()
   const { theme, toggleTheme } = useTheme()
-  const [showAddGroup, setShowAddGroup] = useState(false)
-  const [showAdvanced, setShowAdvanced] = useState(false)
-  const [showEditGroup, setShowEditGroup] = useState(false)
-  const [showImportExport, setShowImportExport] = useState(false)
-  const [showGroupSelect, setShowGroupSelect] = useState(false)
-  const [showOpenTabs, setShowOpenTabs] = useState(false)
-  const [newGroupName, setNewGroupName] = useState("")
-  const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
-  const [editingGroup, setEditingGroup] = useState<{id: string, name: string, color: string} | null>(null)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [contextMenuData, setContextMenuData] = useState<{url: string, title: string} | null>(null)
-  const [openTabs, setOpenTabs] = useState<Array<{id: number, url: string, title: string, favicon?: string}>>([])
+
+  const [groupSearchTerm, setGroupSearchTerm] = useState('')
+  const [showSaveProfileModal, setShowSaveProfileModal] = useState(false)
+  const [profileName, setProfileName] = useState('')
+  const [profileDescription, setProfileDescription] = useState('')
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
+  const [profileToDelete, setProfileToDelete] = useState<ProfileSummary | null>(null)
+
+  const [showAddGroupModal, setShowAddGroupModal] = useState(false)
+  const [showEditGroupModal, setShowEditGroupModal] = useState(false)
+  const [groupDraft, setGroupDraft] = useState<{ id?: string; name: string; color: string }>(
+    { name: '', color: GROUP_COLOR_OPTIONS[1] }
+  )
+  const [showImportExportModal, setShowImportExportModal] = useState(false)
+  const [showOpenTabsModal, setShowOpenTabsModal] = useState(false)
+  const [openTabs, setOpenTabs] = useState<OpenTab[]>([])
   const [selectedTabs, setSelectedTabs] = useState<Set<number>>(new Set())
   const [loadingTabs, setLoadingTabs] = useState(false)
-const [sortBy, setSortBy] = useState<'name' | 'date' | 'url'>('date')
+  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null)
+  const [contextMenuData, setContextMenuData] = useState<ContextMenuPayload | null>(null)
+  const [showGroupSelectModal, setShowGroupSelectModal] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [isImporting, setIsImporting] = useState(false)
+  const [activeTab, setActiveTab] = useState<'profiles' | 'groups'>('profiles')
 
-  // Vérifier s'il y a des données du menu contextuel au chargement
   useEffect(() => {
-    const checkContextMenuData = async () => {
-      const data = await storage.get('contextMenuData')
-      if (data) {
-        setContextMenuData(data)
-        setShowGroupSelect(true)
-        // Nettoyer les données après utilisation
-        await storage.remove('contextMenuData')
+    const readContextPayload = async () => {
+      try {
+        const data = await storage.get<ContextMenuPayload>('contextMenuData')
+        if (data) {
+          setContextMenuData(data)
+          setShowGroupSelectModal(true)
+          await storage.remove('contextMenuData')
+        }
+      } catch (error) {
+        console.error('Erreur de lecture du contexte menu:', error)
       }
     }
-    checkContextMenuData()
+
+    readContextPayload()
   }, [])
 
-  // Charger les onglets ouverts quand la section est affichée
   useEffect(() => {
-    if (showOpenTabs) {
-      loadOpenTabs()
-    } else {
+    if (!showOpenTabsModal) {
       setOpenTabs([])
       setSelectedTabs(new Set())
+      return
     }
-  }, [showOpenTabs])
 
-  const loadOpenTabs = async () => {
-    setLoadingTabs(true)
-    try {
-      const tabs = await chrome.tabs.query({ currentWindow: true })
-      const validTabs = tabs
-        .filter(tab => tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://'))
-        .map(tab => ({
-          id: tab.id,
-          url: tab.url!,
-          title: tab.title || 'Sans titre',
-          favicon: tab.favIconUrl
-        }))
-      setOpenTabs(validTabs)
-    } catch (error) {
-      console.error('Error loading open tabs:', error)
-    } finally {
-      setLoadingTabs(false)
+    const loadTabs = async () => {
+      setLoadingTabs(true)
+      try {
+        const tabs = await chrome.tabs.query({ currentWindow: true })
+        const validTabs = tabs
+          .filter(
+            (tab) =>
+              Boolean(tab.url) &&
+              !tab.url!.startsWith('chrome://') &&
+              !tab.url!.startsWith('chrome-extension://')
+          )
+          .map((tab) => ({
+            id: tab.id!,
+            url: tab.url!,
+            title: tab.title || 'Sans titre',
+            favicon: tab.favIconUrl || undefined,
+          }))
+        setOpenTabs(validTabs)
+      } catch (error) {
+        console.error('Erreur lors du chargement des onglets ouverts:', error)
+        notificationService.error('Erreur', "Impossible de charger les onglets ouverts")
+      } finally {
+        setLoadingTabs(false)
+      }
     }
-  }
+
+    loadTabs()
+  }, [showOpenTabsModal])
+
+  const filteredGroups = useMemo(() => {
+    if (!groupSearchTerm) {
+      return groups
+    }
+
+    const term = groupSearchTerm.toLowerCase()
+    return groups.filter(
+      (group) =>
+        group.name.toLowerCase().includes(term) ||
+        group.urls.some((url) => url.url.toLowerCase().includes(term))
+    )
+  }, [groupSearchTerm, groups])
 
   const toggleTabSelection = (tabId: number) => {
-    setSelectedTabs(prev => {
-      const newSelection = new Set(prev)
-      if (newSelection.has(tabId)) {
-        newSelection.delete(tabId)
+    setSelectedTabs((prev) => {
+      const next = new Set(prev)
+      if (next.has(tabId)) {
+        next.delete(tabId)
       } else {
-        newSelection.add(tabId)
+        next.add(tabId)
       }
-      return newSelection
+      return next
     })
   }
 
   const selectAllTabs = () => {
-    const allTabIds = new Set(openTabs.map(tab => tab.id))
-    setSelectedTabs(allTabIds)
+    setSelectedTabs(new Set(openTabs.map((tab) => tab.id)))
   }
 
-  const clearSelection = () => {
+  const clearTabSelection = () => {
     setSelectedTabs(new Set())
   }
 
-  const sortUrls = (urls: typeof group.urls) => {
-    const sortedUrls = [...urls]
+  const handleQuickCapture = async () => {
+    const result = await captureCurrentState()
+    if (!result) {
+      return
+    }
 
-    switch (sortBy) {
-      case 'name':
-        return sortedUrls.sort((a, b) => (a.title || '').localeCompare(b.title || ''))
-      case 'url':
-        return sortedUrls.sort((a, b) => a.url.localeCompare(b.url))
-      case 'date':
-      default:
-        return sortedUrls.sort((a, b) => a.order - b.order)
+    const defaultName = `Session du ${new Date().toLocaleString('fr-FR')}`
+    setProfileName(defaultName)
+    setProfileDescription('')
+    setSelectedProfileId(null)
+    setShowSaveProfileModal(true)
+    notificationService.info(
+      'Capture prête',
+      `${result.meta.groupCount} groupe(s) détecté(s)`
+    )
+  }
+
+  const handleSaveProfile = async () => {
+    if (!snapshot) {
+      notificationService.warning(
+        'Aucune capture',
+        'Capturez la session courante avant de sauvegarder.'
+      )
+      return
+    }
+
+    const name = profileName.trim()
+    if (!name) {
+      notificationService.warning('Nom requis', 'Donnez un nom à votre profil.')
+      return
+    }
+
+    try {
+      await saveProfile({
+        profileId: selectedProfileId ?? undefined,
+        name,
+        description: profileDescription.trim() || undefined,
+        groups: snapshot.groups,
+      })
+      notificationService.success(
+        'Profil enregistré',
+        selectedProfileId ? 'Profil mis à jour' : 'Nouveau profil créé'
+      )
+      setShowSaveProfileModal(false)
+      setProfileName('')
+      setProfileDescription('')
+      setSelectedProfileId(null)
+    } catch (error) {
+      console.error('Erreur lors de la sauvegarde du profil:', error)
+      notificationService.error('Erreur', "Impossible d'enregistrer le profil")
     }
   }
 
-  const addSelectedTabsToGroup = async (groupId: string) => {
-    if (selectedTabs.size === 0) return
+  const handleOpenProfile = async (profileId: string, openInNewWindow = false) => {
+    try {
+      await openProfile(profileId, { openInNewWindow })
+      window.close()
+    } catch (error) {
+      console.error("Erreur lors de l'ouverture du profil:", error)
+      notificationService.error('Erreur', "Impossible d'ouvrir le profil")
+    }
+  }
+
+  const handleReplaceProfile = async (profile: ProfileSummary) => {
+    const result = await captureCurrentState()
+    if (!result) {
+      return
+    }
+
+    const fullProfile = profiles.find((item) => item.id === profile.id)
+    if (fullProfile) {
+      setProfileName(fullProfile.name)
+      setProfileDescription(fullProfile.description ?? '')
+    } else {
+      setProfileName(profile.name)
+      setProfileDescription(profile.description ?? '')
+    }
+    setSelectedProfileId(profile.id)
+    setShowSaveProfileModal(true)
+    notificationService.info(
+      'Capture prête',
+      'La sauvegarde remplacera le profil sélectionné.'
+    )
+  }
+
+  const handleDeleteProfile = async () => {
+    if (!profileToDelete) {
+      return
+    }
 
     try {
-      const selectedTabsArray = openTabs.filter(tab => selectedTabs.has(tab.id))
-      let addedCount = 0
-      let duplicateCount = 0
+      await deleteProfile(profileToDelete.id)
+      notificationService.success(
+        'Profil supprimé',
+        `Le profil "${profileToDelete.name}" a été supprimé.`
+      )
+      setProfileToDelete(null)
+    } catch (error) {
+      console.error('Erreur suppression profil:', error)
+      notificationService.error('Erreur', 'Impossible de supprimer ce profil')
+    }
+  }
 
-      for (const tab of selectedTabsArray) {
+  const handleCreateGroup = async () => {
+    const name = groupDraft.name.trim()
+    if (!name) {
+      notificationService.warning('Nom requis', 'Indiquez un nom de groupe.')
+      return
+    }
+
+    try {
+      await createGroup(name, groupDraft.color)
+      notificationService.success('Groupe créé', `"${name}" est prêt.`)
+      setShowAddGroupModal(false)
+      setGroupDraft({ name: '', color: groupDraft.color })
+    } catch (error) {
+      console.error('Erreur création groupe:', error)
+      notificationService.error('Erreur', 'Impossible de créer le groupe')
+    }
+  }
+
+  const handleEditGroup = (group: TabGroup) => {
+    setGroupDraft({ id: group.id, name: group.name, color: group.color })
+    setShowEditGroupModal(true)
+  }
+
+  const handlePersistGroupEdition = async () => {
+    if (!groupDraft.id) {
+      return
+    }
+
+    const name = groupDraft.name.trim()
+    if (!name) {
+      notificationService.warning('Nom requis', 'Indiquez un nom de groupe.')
+      return
+    }
+
+    try {
+      await updateGroup(groupDraft.id, { name, color: groupDraft.color })
+      notificationService.success('Groupe mis à jour', `"${name}" a été actualisé.`)
+      setShowEditGroupModal(false)
+      setGroupDraft({ name: '', color: GROUP_COLOR_OPTIONS[1] })
+    } catch (error) {
+      console.error('Erreur mise à jour groupe:', error)
+      notificationService.error('Erreur', 'Impossible de mettre à jour le groupe')
+    }
+  }
+
+  const handleRemoveGroup = async (groupId: string) => {
+    const group = groups.find((item) => item.id === groupId)
+    if (!group) {
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Supprimer le groupe "${group.name}" ? Cette action est irréversible.`
+    )
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      await deleteGroup(groupId)
+      notificationService.success('Groupe supprimé', `"${group.name}" a été supprimé.`)
+    } catch (error) {
+      console.error('Erreur suppression groupe:', error)
+      notificationService.error('Erreur', 'Impossible de supprimer ce groupe')
+    }
+  }
+
+  const handleAddCurrentTabToGroup = async (groupId: string) => {
+    try {
+      const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true })
+      if (!currentTab?.url) {
+        notificationService.warning(
+          'Onglet indisponible',
+          "Impossible de récupérer l'onglet actif"
+        )
+        return
+      }
+
+      await addUrlToGroup(groupId, currentTab.url, currentTab.title)
+      notificationService.success('Onglet ajouté', "L'onglet actif a été enregistré")
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Cette URL existe déjà dans ce groupe') {
+        notificationService.info('Déjà présent', 'Cette page existe déjà dans le groupe')
+      } else {
+        console.error('Erreur ajout onglet groupe:', error)
+        notificationService.error('Erreur', "Impossible d'ajouter l'onglet")
+      }
+    }
+  }
+
+  const handleRemoveUrlFromGroup = async (groupId: string, urlId: string) => {
+    try {
+      await removeUrlFromGroup(groupId, urlId)
+      notificationService.success('Lien retiré', "L'URL a été supprimée du groupe")
+    } catch (error) {
+      console.error('Erreur suppression URL:', error)
+      notificationService.error('Erreur', "Impossible de supprimer l'URL du groupe")
+    }
+  }
+
+  const handleAddSelectedTabsToGroup = async (groupId: string) => {
+    if (selectedTabs.size === 0) {
+      notificationService.info('Aucun onglet', 'Sélectionnez des onglets à enregistrer')
+      return
+    }
+
+    try {
+      const tabsToAdd = openTabs.filter((tab) => selectedTabs.has(tab.id))
+      let added = 0
+      let duplicates = 0
+
+      for (const tab of tabsToAdd) {
         try {
           await addUrlToGroup(groupId, tab.url, tab.title)
-          addedCount++
+          added += 1
         } catch (error) {
-          if (error.message === 'Cette URL existe déjà dans ce groupe') {
-            duplicateCount++
+          if (error instanceof Error && error.message === 'Cette URL existe déjà dans ce groupe') {
+            duplicates += 1
           }
         }
       }
 
-      let message = `${addedCount} onglet(s) ajouté(s) avec succès`
-      if (duplicateCount > 0) {
-        message += ` (${duplicateCount} déjà présent(s))`
-      }
-
-      alert(message)
-      setShowOpenTabs(false)
-      setSelectedTabs(new Set())
-    } catch (error) {
-      console.error('Error adding selected tabs:', error)
-      alert('Erreur lors de l&apos;ajout des onglets')
-    }
-  }
-
-  const handleAddGroup = async () => {
-    if (newGroupName.trim()) {
-      await createGroup(newGroupName.trim())
-      setNewGroupName("")
-      setShowAddGroup(false)
-    }
-  }
-
-  const handleAddCurrentTab = async (groupId: string) => {
-    try {
-      const [currentTab] = await chrome.tabs.query({
-        active: true,
-        currentWindow: true
-      })
-
-      if (currentTab && currentTab.url) {
-        await addUrlToGroup(groupId, currentTab.url, currentTab.title)
-        setSelectedGroup(null)
-      }
-    } catch (error) {
-      console.error('Error adding current tab:', error)
-      // Afficher un message d'erreur si c'est un doublon
-      if (error.message === 'Cette URL existe déjà dans ce groupe') {
-        alert('Cette page est déjà dans ce groupe !')
-      }
-    }
-  }
-
-  const handleEditGroup = async () => {
-    if (editingGroup) {
-      const updatedGroups = groups.map(group =>
-        group.id === editingGroup.id
-          ? {
-              ...group,
-              name: editingGroup.name,
-              color: editingGroup.color,
-              updatedAt: new Date()
-            }
-          : group
+      const baseMessage = `${added} onglet(s) enregistré(s)`
+      notificationService.success(
+        'Enregistrement terminé',
+        duplicates > 0 ? `${baseMessage} (${duplicates} déjà présents)` : baseMessage
       )
-      await storage.set('groups', updatedGroups)
-      setEditingGroup(null)
-      setShowEditGroup(false)
-    }
-  }
 
-  const openEditGroup = (group: TabGroup) => {
-    setEditingGroup({
-      id: group.id,
-      name: group.name,
-      color: group.color
-    })
-    setShowEditGroup(true)
-  }
-
-  const handleDeleteGroup = async (groupId: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer ce groupe ?')) {
-      const updatedGroups = groups.filter(group => group.id !== groupId)
-      await storage.set('groups', updatedGroups)
-      if (selectedGroup === groupId) {
-        setSelectedGroup(null)
-      }
-    }
-  }
-
-  const handleDeleteUrl = async (groupId: string, urlId: string) => {
-    try {
-      await removeUrlFromGroup(groupId, urlId)
+      setSelectedTabs(new Set())
+      setShowOpenTabsModal(false)
     } catch (error) {
-      console.error('Error deleting URL:', error)
-      alert('Erreur lors de la suppression de l&apos;URL')
-    }
-  }
-
-  const handleAddFromContextMenu = async (groupId: string) => {
-    if (!contextMenuData) return
-
-    try {
-      await addUrlToGroup(groupId, contextMenuData.url, contextMenuData.title)
-      setShowGroupSelect(false)
-      setContextMenuData(null)
-      alert('URL ajoutée avec succès !')
-    } catch (error) {
-      console.error('Error adding URL from context menu:', error)
-      if (error.message === 'Cette URL existe déjà dans ce groupe') {
-        alert('Cette URL est déjà dans ce groupe !')
-      } else {
-        alert('Erreur lors de l\'ajout de l\'URL')
-      }
+      console.error('Erreur ajout onglets sélectionnés:', error)
+      notificationService.error('Erreur', "Impossible d'ajouter les onglets sélectionnés")
     }
   }
 
   const handleImportBookmarks = async () => {
     try {
       const bookmarks = await chrome.bookmarks.getTree()
-      const bookmarkBar = bookmarks[0].children?.find(child => child.title === 'Bookmarks Bar')
+      const bookmarkBar = bookmarks[0].children?.find((child) => child.title === 'Bookmarks Bar' || child.title === 'Barre de favoris')
 
-      if (bookmarkBar && bookmarkBar.children) {
-        for (const folder of bookmarkBar.children) {
-          if (folder.children && folder.children.length > 0) {
-            const newGroup: TabGroup = {
-              id: Date.now().toString() + Math.random(),
-              name: folder.title,
-              color: GROUP_COLORS[Math.floor(Math.random() * GROUP_COLORS.length)],
-              urls: folder.children
-                .filter(bookmark => bookmark.url && !bookmark.url.startsWith('javascript:'))
-                .map((bookmark, index) => ({
-                  id: Date.now().toString() + index,
-                  url: bookmark.url!,
-                  title: bookmark.title,
-                  groupId: '',
-                  order: index
-                })),
-              createdAt: new Date(),
-              updatedAt: new Date()
-            }
+      if (!bookmarkBar?.children) {
+        notificationService.warning('Aucun favori', 'Aucun dossier de favoris à importer')
+        return
+      }
 
-            await createGroup(newGroup.name, newGroup.color)
+      for (const folder of bookmarkBar.children) {
+        if (!folder.children || folder.children.length === 0) {
+          continue
+        }
 
-            const group = groups.find(g => g.name === newGroup.name)
-            if (group) {
-              for (const url of newGroup.urls) {
-                await addUrlToGroup(group.id, url.url, url.title)
-              }
+        const color = GROUP_COLOR_OPTIONS[Math.floor(Math.random() * GROUP_COLOR_OPTIONS.length)]
+        const newGroup = await createGroup(folder.title, color)
+
+        for (const bookmark of folder.children) {
+          if (!bookmark.url || bookmark.url.startsWith('javascript:')) {
+            continue
+          }
+
+          try {
+            await addUrlToGroup(newGroup.id, bookmark.url, bookmark.title)
+          } catch (error) {
+            if (!(error instanceof Error && error.message === 'Cette URL existe déjà dans ce groupe')) {
+              console.error('Erreur import URL favori:', error)
             }
           }
         }
-        alert('Import des bookmarks terminé !')
-        setShowImportExport(false)
       }
+
+      notificationService.success('Import terminé', 'Les favoris ont été importés')
+      setShowImportExportModal(false)
     } catch (error) {
-      alert('Erreur lors de l\'import des bookmarks : ' + error.message)
+      console.error('Erreur import favoris:', error)
+      notificationService.error('Erreur', "Impossible d'importer les favoris")
     }
   }
 
-  const handleExportJson = () => {
-    const dataStr = JSON.stringify({ groups }, null, 2)
-    const dataBlob = new Blob([dataStr], { type: 'application/json' })
-    const url = URL.createObjectURL(dataBlob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `open-tabs-export-${new Date().toISOString().split('T')[0]}.json`
-    link.click()
-    URL.revokeObjectURL(url)
+  const handleExportData = async () => {
+    try {
+      const response = await chrome.runtime.sendMessage({
+        action: 'EXPORT_DATA',
+      })
+
+      const data = {
+        groups: response.groups || [],
+        profiles: response.profiles || [],
+        settings: response.settings || {},
+        version: '1.1',
+        exportedAt: new Date().toISOString(),
+      }
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `open-tabs-${new Date().toISOString().split('T')[0]}.json`
+      link.click()
+      URL.revokeObjectURL(url)
+      notificationService.success('Export réussi', 'Votre sauvegarde JSON est prête')
+    } catch (error) {
+      console.error('Erreur export JSON:', error)
+      notificationService.error('Erreur', "Impossible d'exporter les données")
+    }
   }
 
-  const filteredGroups = groups.filter(group =>
-    group.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    group.urls.some(url => url.url.toLowerCase().includes(searchTerm.toLowerCase()))
-  )
+  const handleImportData = async (file: File) => {
+    setIsImporting(true)
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+
+      // Valider les données
+      if (!data.groups || !Array.isArray(data.groups)) {
+        throw new Error('Format de fichier invalide: groupes manquants')
+      }
+
+      // Valider les profils si présents
+      if (data.profiles && !Array.isArray(data.profiles)) {
+        throw new Error('Format de fichier invalide: profils incorrects')
+      }
+
+      const response = await chrome.runtime.sendMessage({
+        action: 'IMPORT_DATA',
+        payload: data,
+      })
+
+      if (response && response.error) {
+        throw new Error(response.error)
+      }
+
+      notificationService.success(
+        'Import réussi',
+        `${response.importedGroups} groupe(s) et ${response.importedProfiles || 0} profil(s) importé(s)`
+      )
+      setImportFile(null)
+      setShowImportExportModal(false)
+    } catch (error) {
+      console.error('Erreur import JSON:', error)
+      notificationService.error('Erreur', error instanceof Error ? error.message : "Impossible d'importer les données")
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
+  const handleAddFromContextMenu = async (groupId: string) => {
+    if (!contextMenuData) {
+      return
+    }
+
+    try {
+      await addUrlToGroup(groupId, contextMenuData.url, contextMenuData.title)
+      notificationService.success('URL ajoutée', 'Le lien a été enregistré dans le groupe')
+      setContextMenuData(null)
+      setShowGroupSelectModal(false)
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Cette URL existe déjà dans ce groupe') {
+        notificationService.info('Déjà présent', 'Ce lien était déjà enregistré')
+      } else {
+        console.error('Erreur ajout URL depuis menu contextuel:', error)
+        notificationService.error('Erreur', "Impossible d'ajouter le lien")
+      }
+    }
+  }
 
   const handleOpenGroup = async (groupId: string) => {
     try {
-      await chrome.runtime.sendMessage({
-        action: 'openTabGroup',
-        groupId
-      })
+      await chrome.runtime.sendMessage({ action: 'openTabGroup', groupId })
       window.close()
     } catch (error) {
-      console.error('Error opening group:', error)
+      console.error("Erreur lors de l'ouverture du groupe:", error)
+      notificationService.error('Erreur', "Impossible d'ouvrir ce groupe")
     }
   }
 
-  if (loading) {
-    return (
-      <div style={{
-        width: '350px',
-        padding: '20px',
-        fontFamily: 'Arial, sans-serif',
-        textAlign: 'center'
-      }}>
-        <p>Chargement...</p>
-      </div>
-    )
+  const handleOpenAllGroups = async () => {
+    for (const group of groups) {
+      try {
+        await chrome.runtime.sendMessage({ action: 'openTabGroup', groupId: group.id })
+      } catch (error) {
+        console.error('Erreur ouverture groupe multiple:', error)
+      }
+    }
+    window.close()
   }
 
   return (
-    <div style={{
-      width: '350px',
-      maxHeight: '500px',
-      padding: '16px',
-      fontFamily: 'Arial, sans-serif',
-      boxSizing: 'border-box',
-      backgroundColor: 'var(--bg-primary)',
-      color: 'var(--text-primary)'
-    }}>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '16px'
-      }}>
-        <h1 style={{
-          margin: 0,
-          fontSize: '20px',
-          fontWeight: 'bold',
-          color: 'var(--text-primary)'
-        }}>
-          Open Tabs
-        </h1>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            onClick={toggleTheme}
-            style={{
-              background: 'var(--bg-secondary)',
-              color: 'var(--text-primary)',
-              border: '1px solid var(--border-primary)',
-              padding: '6px 8px',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}
-            title={theme === 'light' ? 'Passer en mode sombre' : 'Passer en mode clair'}
-          >
-            {theme === 'light' ? '🌙' : '☀️'}
-          </button>
-          <button
-            onClick={() => chrome.runtime.openOptionsPage()}
-            style={{
-              background: 'var(--bg-secondary)',
-              color: 'var(--text-primary)',
-              border: '1px solid var(--border-primary)',
-              padding: '6px 8px',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}
-            title="Options et Import/Export"
-          >
-            ⚙️
-          </button>
-          <button
-            onClick={() => setShowAdvanced(!showAdvanced)}
-            style={{
-              background: showAdvanced ? 'var(--accent-red)' : 'var(--bg-secondary)',
-              color: showAdvanced ? 'white' : 'var(--text-primary)',
-              border: '1px solid var(--border-primary)',
-              padding: '6px 12px',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '11px'
-            }}
-          >
-            {showAdvanced ? 'Mode simple' : 'Mode avancé'}
-          </button>
-        </div>
-      </div>
+    <PopupContainer className="w-[384px] bg-slate-900/5">
+      <NotificationManager />
 
-      {groups.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '20px 0' }}>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '16px' }}>
-            Aucun groupe créé
+      <PopupHeader
+        showCloseButton={false}
+        className="bg-gradient-to-br from-indigo-600 via-sky-600 to-cyan-600 text-white"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-white/90 hover:bg-white/20"
+              onClick={toggleTheme}
+            >
+              {theme === 'light' ? '🌙' : '☀️'}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-white/90 hover:bg-white/20"
+              onClick={() => chrome.runtime.openOptionsPage?.()}
+            >
+              ⚙️
+            </Button>
+          </div>
+        }
+      >
+        <div>
+          <p className="text-xs uppercase tracking-wider text-white/70">Open Tabs</p>
+          <h1 className="text-lg font-semibold">Vos profils en un clin d'œil</h1>
+          <p className="text-xs text-white/80">
+            Capturez, restaurez et organisez vos sessions de navigation.
           </p>
-          <button
-            onClick={() => setShowAddGroup(true)}
-            style={{
-              background: '#4285f4',
-              color: 'white',
-              border: 'none',
-              padding: '8px 16px',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '14px'
-            }}
-          >
-            Créer un groupe
-          </button>
         </div>
-      ) : (
-        <>
-          {/* Mode avancé */}
-        {showAdvanced && (
-          <div style={{
-            marginBottom: '16px',
-            padding: '12px',
-            backgroundColor: 'var(--bg-secondary)',
-            borderRadius: '8px',
-            border: '1px solid var(--border-primary)'
-          }}>
-            <input
-              type="text"
-              placeholder="Rechercher..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                marginBottom: '8px',
-                fontSize: '12px'
-              }}
-            />
+      </PopupHeader>
 
-            <div style={{
-              display: 'flex',
-              gap: '6px',
-              flexWrap: 'wrap'
-            }}>
-              <button
-                onClick={() => setShowImportExport(true)}
-                style={{
-                  flex: 1,
-                  minWidth: '80px',
-                  background: '#fbbc04',
-                  color: 'white',
-                  border: 'none',
-                  padding: '6px 8px',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '10px'
-                }}
-              >
-                Import/Export
-              </button>
-              <button
-                onClick={() => setShowOpenTabs(true)}
-                style={{
-                  flex: 1,
-                  minWidth: '80px',
-                  background: '#34a853',
-                  color: 'white',
-                  border: 'none',
-                  padding: '6px 8px',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '10px'
-                }}
-              >
-                Onglets ouverts
-              </button>
-            </div>
+      <PopupContent className="flex-1 overflow-y-auto bg-slate-50 p-4 space-y-6">
+        {profilesError && (
+          <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <span>{profilesError}</span>
+            <button
+              onClick={clearError}
+              className="rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-100"
+            >
+              OK
+            </button>
           </div>
         )}
 
-        <div style={{
-          display: 'flex',
-          gap: '8px',
-          marginBottom: '16px'
-        }}>
+        {/* Tabs Navigation */}
+        <div className="flex border-b border-slate-200">
           <button
-            onClick={() => setShowAddGroup(true)}
-            style={{
-              flex: 1,
-              background: '#4285f4',
-              color: 'white',
-              border: 'none',
-              padding: '8px 12px',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '12px'
-            }}
+            className={`flex-1 py-2 px-4 text-center text-sm font-medium transition-colors ${
+              activeTab === 'profiles'
+                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+            }`}
+            onClick={() => setActiveTab('profiles')}
           >
-            + Nouveau groupe
+            Profils
           </button>
-          {selectedGroup && (
-            <button
-              onClick={() => handleAddCurrentTab(selectedGroup)}
-              style={{
-                flex: 1,
-                background: '#34a853',
-                color: 'white',
-                border: 'none',
-                padding: '8px 12px',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '12px'
-              }}
-            >
-              Ajouter l&apos;onglet
-            </button>
-          )}
+          <button
+            className={`flex-1 py-2 px-4 text-center text-sm font-medium transition-colors ${
+              activeTab === 'groups'
+                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+            }`}
+            onClick={() => setActiveTab('groups')}
+          >
+            Groupes
+          </button>
         </div>
 
-          <div style={{
-            maxHeight: '350px',
-            overflowY: 'auto'
-          }}>
-            {filteredGroups.map((group) => (
-              <div
-                key={group.id}
-                style={{
-                  border: '1px solid #e0e0e0',
-                  borderRadius: '8px',
-                  padding: '12px',
-                  marginBottom: '8px',
-                  backgroundColor: selectedGroup === group.id ? 'var(--bg-secondary)' : 'var(--bg-primary)'
-                }}
+        {/* Tab Content */}
+        {activeTab === 'profiles' && (
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                className="flex-1 justify-start gap-2"
+                onClick={handleQuickCapture}
+                isLoading={isCapturing}
               >
-                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-                  <div
-                    style={{
-                      width: '12px',
-                      height: '12px',
-                      borderRadius: '50%',
-                      backgroundColor: group.color,
-                      marginRight: '8px'
-                    }}
-                  />
-                  <h3 style={{
-                    margin: 0,
-                    fontSize: '14px',
-                    fontWeight: 'bold',
-                    color: 'var(--text-primary)',
-                    flex: 1
-                  }}>
-                    {group.name}
-                  </h3>
-                  <span style={{
-                    fontSize: '12px',
-                    color: 'var(--text-secondary)',
-                    backgroundColor: 'var(--bg-secondary)',
-                    padding: '2px 6px',
-                    borderRadius: '4px'
-                  }}>
-                    {group.urls.length}
-                  </span>
-                </div>
+                📸 Capturer la session
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="justify-start gap-2"
+                onClick={() => setShowImportExportModal(true)}
+              >
+                📁 Import / Export
+              </Button>
+            </div>
 
-                {/* Afficher les URLs du groupe */}
-                {selectedGroup === group.id && group.urls.length > 0 && (
-                  <>
-                    {/* Options de tri */}
-                    <div style={{
-                      marginBottom: '8px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      fontSize: '10px',
-                      color: 'var(--text-secondary)'
-                    }}>
-                      <span>Trier par :</span>
-                      <button
-                        onClick={() => setSortBy('date')}
-                        style={{
-                          background: sortBy === 'date' ? 'var(--accent-blue)' : 'var(--bg-secondary)',
-                          color: sortBy === 'date' ? 'white' : 'var(--text-primary)',
-                          border: '1px solid var(--border-primary)',
-                          padding: '2px 6px',
-                          borderRadius: '3px',
-                          cursor: 'pointer',
-                          fontSize: '9px'
-                        }}
-                      >
-                        Date
-                      </button>
-                      <button
-                        onClick={() => setSortBy('name')}
-                        style={{
-                          background: sortBy === 'name' ? 'var(--accent-blue)' : 'var(--bg-secondary)',
-                          color: sortBy === 'name' ? 'white' : 'var(--text-primary)',
-                          border: '1px solid var(--border-primary)',
-                          padding: '2px 6px',
-                          borderRadius: '3px',
-                          cursor: 'pointer',
-                          fontSize: '9px'
-                        }}
-                      >
-                        Nom
-                      </button>
-                      <button
-                        onClick={() => setSortBy('url')}
-                        style={{
-                          background: sortBy === 'url' ? 'var(--accent-blue)' : 'var(--bg-secondary)',
-                          color: sortBy === 'url' ? 'white' : 'var(--text-primary)',
-                          border: '1px solid var(--border-primary)',
-                          padding: '2px 6px',
-                          borderRadius: '3px',
-                          cursor: 'pointer',
-                          fontSize: '9px'
-                        }}
-                      >
-                        URL
-                      </button>
-                    </div>
-                    <div style={{
-                      marginBottom: '12px',
-                      fontSize: '11px',
-                      color: 'var(--text-secondary)'
-                    }}>
-                    {sortUrls(group.urls).slice(0, 5).map((url, index) => (
-                      <div
-                        key={url.id}
-                        style={{
-                          marginBottom: '3px',
-                          padding: '4px',
-                          backgroundColor: 'var(--bg-tertiary)',
-                          borderRadius: '3px',
-                          border: '1px solid var(--border-secondary)',
-                          cursor: 'default'
-                        }}
-                        title={url.url} // Tooltip au survol
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div style={{ flex: 1, marginRight: '8px' }}>
-                            <div style={{ fontWeight: 'bold', color: 'var(--text-primary)', marginBottom: '1px' }}>
-                              {url.title || 'Sans titre'}
-                            </div>
-                            <div style={{
-                              color: 'var(--text-secondary)',
-                              fontSize: '10px',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap'
-                            }}>
-                              {url.url}
-                            </div>
+            <section className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-slate-800">Profils enregistrés</h2>
+                {summaries.length > 1 && (
+                  <button
+                    className="text-xs text-slate-500 underline hover:text-slate-700"
+                    onClick={handleOpenAllGroups}
+                  >
+                    Ouvrir tous les groupes
+                  </button>
+                )}
+              </div>
+
+              {areProfilesLoading ? (
+                <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white py-6">
+                  <LoadingSpinner size="sm" />
+                </div>
+              ) : summaries.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
+                  Capturez votre première session pour créer un profil.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {summaries.map((summary) => (
+                    <div
+                      key={summary.id}
+                      className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-semibold text-slate-900">{summary.name}</h3>
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+                              {summary.tabCount} onglet(s)
+                            </span>
                           </div>
-                          <button
-                            onClick={() => handleDeleteUrl(group.id, url.id)}
-                            style={{
-                              background: 'var(--accent-red)',
-                              color: 'white',
-                              border: 'none',
-                              padding: '2px 6px',
-                              borderRadius: '3px',
-                              cursor: 'pointer',
-                              fontSize: '10px',
-                              minWidth: '20px',
-                              height: '20px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}
-                            title="Supprimer cette URL"
+                          {summary.description && (
+                            <p className="mt-1 text-xs text-slate-500">{summary.description}</p>
+                          )}
+                          <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
+                            <span>{summary.groupCount} groupe(s)</span>
+                            <span>MàJ {new Date(summary.updatedAt).toLocaleDateString('fr-FR')}</span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => handleOpenProfile(summary.id)}
+                            isLoading={isOpening}
                           >
-                            ×
-                          </button>
+                            Ouvrir ici
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenProfile(summary.id, true)}
+                            isLoading={isOpening}
+                          >
+                            Nouvelle fenêtre
+                          </Button>
                         </div>
                       </div>
-                    ))}
-                    {group.urls.length > 5 && (
-                      <div style={{
-                        fontStyle: 'italic',
-                        marginTop: '4px',
-                        padding: '4px',
-                        backgroundColor: '#f0f0f0',
-                        borderRadius: '3px',
-                        textAlign: 'center'
-                      }}>
-                        +{group.urls.length - 5} autres URLs...
+
+                      <div className="mt-3 flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-3">
+                          <button
+                            className="text-slate-500 hover:text-slate-700"
+                            onClick={() => handleReplaceProfile(summary)}
+                            disabled={isCapturing}
+                          >
+                            Actualiser avec la session courante
+                          </button>
+                          <button
+                            className="text-slate-400 hover:text-red-500"
+                            onClick={() => setProfileToDelete(summary)}
+                            disabled={isDeleting}
+                          >
+                            Supprimer
+                          </button>
+                        </div>
+                        <button
+                          className="text-slate-400 hover:text-slate-600"
+                          onClick={() => setExpandedGroupId((prev) => (prev === summary.id ? null : summary.id))}
+                        >
+                          {expandedGroupId === summary.id ? 'Masquer' : 'Détails'}
+                        </button>
+                      </div>
+
+                      {expandedGroupId === summary.id && (
+                        <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600">
+                          {profiles
+                            .find((profile) => profile.id === summary.id)?.groups.slice(0, 4)
+                            .map((group) => (
+                              <div key={group.id} className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className="h-2 w-2 rounded-full"
+                                    style={{ backgroundColor: group.color || '#4A90E2' }}
+                                  />
+                                  <span className="font-medium text-slate-800">{group.title}</span>
+                                </div>
+                                <span>{group.tabs.length} onglet(s)</span>
+                              </div>
+                            ))}
+                          {profiles.find((profile) => profile.id === summary.id)?.groups.length! > 4 && (
+                            <p className="mt-2 italic text-slate-500">
+                              + {profiles.find((profile) => profile.id === summary.id)?.groups.length! - 4} autres groupes
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+        )}
+
+        {activeTab === 'groups' && (
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                className="flex-1 justify-start gap-2"
+                onClick={() => setShowOpenTabsModal(true)}
+              >
+                ➕ Ajouter des onglets
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="justify-start gap-2"
+                onClick={() => setShowAddGroupModal(true)}
+              >
+                ✨ Nouveau groupe
+              </Button>
+            </div>
+
+            <section className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-slate-800">Groupes enregistrés</h2>
+                <span className="text-xs text-slate-500">{groups.length} groupe(s)</span>
+              </div>
+
+          <SearchBar
+            value={groupSearchTerm}
+            onChange={setGroupSearchTerm}
+            onClear={() => setGroupSearchTerm('')}
+            placeholder="Rechercher un groupe ou une URL"
+            className="bg-white"
+          />
+
+          {areGroupsLoading ? (
+            <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white py-6">
+              <LoadingSpinner size="sm" />
+            </div>
+          ) : filteredGroups.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
+              Aucun groupe ne correspond à votre recherche.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredGroups.map((group) => {
+                const isExpanded = expandedGroupId === group.id
+                return (
+                  <div
+                    key={group.id}
+                    className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <span
+                          className="h-3 w-3 rounded-full"
+                          style={{ backgroundColor: group.color }}
+                        />
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">{group.name}</p>
+                          <div className="text-xs text-slate-500">
+                            {group.urls.length} lien(s) sauvegardé(s)
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => handleAddCurrentTabToGroup(group.id)}
+                        >
+                          + Onglet actif
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenGroup(group.id)}
+                        >
+                          Ouvrir
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-3">
+                        <button
+                          className="text-slate-500 hover:text-slate-700"
+                          onClick={() => setExpandedGroupId(isExpanded ? null : group.id)}
+                        >
+                          {isExpanded ? 'Masquer les liens' : 'Voir les liens'}
+                        </button>
+                        <button
+                          className="text-slate-400 hover:text-slate-600"
+                          onClick={() => handleEditGroup(group)}
+                        >
+                          Renommer / couleur
+                        </button>
+                        <button
+                          className="text-slate-400 hover:text-red-500"
+                          onClick={() => handleRemoveGroup(group.id)}
+                        >
+                          Supprimer
+                        </button>
+                      </div>
+                      <button
+                        className="text-slate-400 hover:text-slate-600"
+                        onClick={() => setShowOpenTabsModal(true)}
+                      >
+                        Ajouter des onglets…
+                      </button>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="mt-3 space-y-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600">
+                        {group.urls.slice(0, 5).map((url) => (
+                          <div key={url.id} className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="text-slate-800">{url.title || 'Sans titre'}</p>
+                              <p className="break-all text-[11px] text-slate-500">{url.url}</p>
+                            </div>
+                            <button
+                              className="text-slate-400 hover:text-red-500"
+                              onClick={() => handleRemoveUrlFromGroup(group.id, url.id)}
+                            >
+                              Supprimer
+                            </button>
+                          </div>
+                        ))}
+                        {group.urls.length > 5 && (
+                          <p className="italic text-slate-500">
+                            + {group.urls.length - 5} lien(s) supplémentaire(s)
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>
-                  </>
-                )}
-
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    onClick={() => setSelectedGroup(selectedGroup === group.id ? null : group.id)}
-                    style={{
-                      flex: 1,
-                      background: selectedGroup === group.id ? '#ea4335' : '#f8f9fa',
-                      color: selectedGroup === group.id ? 'white' : '#333',
-                      border: '1px solid #e0e0e0',
-                      padding: '6px 8px',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '11px'
-                    }}
-                  >
-                    {selectedGroup === group.id ? 'Masquer' : 'Voir URLs'}
-                  </button>
-                  <button
-                    onClick={() => handleOpenGroup(group.id)}
-                    style={{
-                      flex: 1,
-                      background: '#1a73e8',
-                      color: 'white',
-                      border: 'none',
-                      padding: '6px 8px',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '11px'
-                    }}
-                  >
-                    Ouvrir
-                  </button>
-                  {showAdvanced && (
-                    <button
-                      onClick={() => openEditGroup(group)}
-                      style={{
-                        background: '#fbbc04',
-                        color: 'white',
-                        border: 'none',
-                        padding: '6px 8px',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '11px'
-                      }}
-                    >
-                      ✏️
-                    </button>
-                  )}
-                  {showAdvanced && (
-                    <button
-                      onClick={() => handleDeleteGroup(group.id)}
-                      style={{
-                        background: '#ea4335',
-                        color: 'white',
-                        border: 'none',
-                        padding: '6px 8px',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '11px'
-                      }}
-                    >
-                      🗑️
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Bouton pour ouvrir TOUS les groupes */}
-          {groups.length > 0 && (
-            <div style={{
-              marginTop: '12px',
-              paddingTop: '12px',
-              borderTop: '1px solid #e0e0e0'
-            }}>
-              <button
-                onClick={async () => {
-                  for (const group of groups) {
-                    try {
-                      await chrome.runtime.sendMessage({
-                        action: 'openTabGroup',
-                        groupId: group.id
-                      })
-                    } catch (error) {
-                      console.error('Error opening group:', error)
-                    }
-                  }
-                  window.close()
-                }}
-                style={{
-                  width: '100%',
-                  background: '#34a853',
-                  color: 'white',
-                  border: 'none',
-                  padding: '10px',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: 'bold'
-                }}
-              >
-                🌅 Ouvrir TOUS les groupes ({groups.length})
-              </button>
+                )
+              })}
             </div>
           )}
-        </>
-      )}
+        </section>
+      </div>
+    )}
+      </PopupContent>
 
-      {showAddGroup && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            backgroundColor: 'white',
-            padding: '20px',
-            borderRadius: '8px',
-            width: '280px',
-            boxShadow: '0 2px 10px rgba(0,0,0,0.2)'
-          }}>
-            <h3 style={{
-              margin: '0 0 16px 0',
-              fontSize: '16px',
-              fontWeight: 'bold'
-            }}>
-              Nouveau groupe
-            </h3>
-            <input
-              type="text"
-              placeholder="Nom du groupe"
-              value={newGroupName}
-              onChange={(e) => setNewGroupName(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                marginBottom: '16px',
-                fontSize: '14px'
-              }}
-              autoFocus
-            />
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={() => {
-                  setShowAddGroup(false)
-                  setNewGroupName("")
-                }}
-                style={{
-                  flex: 1,
-                  background: '#f8f9fa',
-                  color: '#333',
-                  border: '1px solid #ddd',
-                  padding: '8px',
-                  borderRadius: '4px',
-                  cursor: 'pointer'
-                }}
-              >
-                Annuler
-              </button>
-              <button
-                onClick={handleAddGroup}
-                style={{
-                  flex: 1,
-                  background: '#4285f4',
-                  color: 'white',
-                  border: 'none',
-                  padding: '8px',
-                  borderRadius: '4px',
-                  cursor: 'pointer'
+      <PopupFooter
+        className="bg-white"
+        actions={<span className="text-xs text-slate-500">{groups.length} groupe(s)</span>}
+      >
+        <span className="text-xs text-slate-500">{summaries.length} profil(s)</span>
+      </PopupFooter>
+
+      <Modal
+        isOpen={showSaveProfileModal}
+        onClose={() => setShowSaveProfileModal(false)}
+        title={selectedProfileId ? 'Mettre à jour le profil' : 'Nouveau profil'}
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Ajoutez un titre et un contexte pour retrouver vos sessions plus facilement.
+          </p>
+
+          <Input
+            label="Nom du profil"
+            value={profileName}
+            onChange={(event) => setProfileName(event.target.value)}
+            placeholder="Ex. Routine du matin, Projet client, Recherche…"
+          />
+
+          <Input
+            label="Description (optionnelle)"
+            value={profileDescription}
+            onChange={(event) => setProfileDescription(event.target.value)}
+            placeholder="Notes sur ce profil"
+          />
+
+          {summaries.length > 0 && (
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-slate-700">Écraser un profil existant</label>
+              <select
+                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                value={selectedProfileId ?? ''}
+                onChange={(event) => {
+                  const value = event.target.value || null
+                  setSelectedProfileId(value)
+                  if (!value) {
+                    setProfileName('')
+                    setProfileDescription('')
+                    return
+                  }
+                  const profile = profiles.find((item) => item.id === value)
+                  if (profile) {
+                    setProfileName(profile.name)
+                    setProfileDescription(profile.description ?? '')
+                    setSnapshot({
+                      groups: profile.groups,
+                      meta: {
+                        groupCount: profile.groups.length,
+                        tabCount: profile.groups.reduce((total, group) => total + group.tabs.length, 0),
+                      },
+                    })
+                  }
                 }}
               >
-                Créer
-              </button>
+                <option value="">Nouvelle sauvegarde</option>
+                {summaries.map((summary) => (
+                  <option key={summary.id} value={summary.id}>
+                    {summary.name} ({summary.tabCount} onglet(s))
+                  </option>
+                ))}
+              </select>
             </div>
+          )}
+
+          {snapshot && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+              <p className="font-medium text-slate-800">Capture en attente</p>
+              <p>
+                {snapshot.meta.groupCount} groupe(s) • {snapshot.meta.tabCount} onglet(s)
+              </p>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setShowSaveProfileModal(false)}>
+              Annuler
+            </Button>
+            <Button variant="primary" size="sm" onClick={handleSaveProfile} isLoading={isSaving}>
+              Enregistrer
+            </Button>
           </div>
         </div>
-      )}
+      </Modal>
 
-      <div style={{
-        marginTop: '16px',
-        paddingTop: '16px',
-        borderTop: '1px solid #e0e0e0',
-        textAlign: 'center',
-        fontSize: '12px',
-        color: '#666'
-      }}>
-        {filteredGroups.length} groupe{filteredGroups.length !== 1 ? 's' : ''} affiché{filteredGroups.length !== 1 ? 's' : ''} sur {groups.length}
-      </div>
+      <Modal
+        isOpen={Boolean(profileToDelete)}
+        onClose={() => setProfileToDelete(null)}
+        title="Supprimer le profil"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Êtes-vous certain de vouloir supprimer le profil « {profileToDelete?.name} » ? Cette action est définitive.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setProfileToDelete(null)}>
+              Annuler
+            </Button>
+            <Button variant="danger" size="sm" onClick={handleDeleteProfile} isLoading={isDeleting}>
+              Supprimer
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
-      {/* Modal Édition Groupe */}
-      {showEditGroup && editingGroup && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1001
-        }}>
-          <div style={{
-            backgroundColor: 'white',
-            padding: '20px',
-            borderRadius: '8px',
-            width: '300px',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
-          }}>
-            <h3 style={{
-              margin: '0 0 16px 0',
-              fontSize: '16px',
-              fontWeight: 'bold'
-            }}>
-              Modifier le groupe
-            </h3>
+      <Modal
+        isOpen={showAddGroupModal}
+        onClose={() => setShowAddGroupModal(false)}
+        title="Nouveau groupe"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <Input
+            label="Nom du groupe"
+            value={groupDraft.name}
+            onChange={(event) => setGroupDraft((prev) => ({ ...prev, name: event.target.value }))}
+            placeholder="Nom du groupe"
+          />
 
-            <input
-              type="text"
-              placeholder="Nom du groupe"
-              value={editingGroup.name}
-              onChange={(e) => setEditingGroup({...editingGroup, name: e.target.value})}
-              style={{
-                width: '100%',
-                padding: '8px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                marginBottom: '12px',
-                fontSize: '14px'
-              }}
-              autoFocus
-            />
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-slate-700">Couleur</p>
+            <div className="flex flex-wrap gap-2">
+              {GROUP_COLOR_OPTIONS.map((color) => (
+                <button
+                  key={color}
+                  className={`h-8 w-8 rounded-full border-2 ${groupDraft.color === color ? 'border-slate-900' : 'border-transparent'}`}
+                  style={{ backgroundColor: color }}
+                  onClick={() => setGroupDraft((prev) => ({ ...prev, color }))}
+                />
+              ))}
+            </div>
+          </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '12px' }}>
-                Couleur :
-              </label>
-              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                {GROUP_COLORS.map((color) => (
-                  <div
-                    key={color}
-                    onClick={() => setEditingGroup({...editingGroup, color})}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '2px'
-                    }}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setShowAddGroupModal(false)}>
+              Annuler
+            </Button>
+            <Button variant="primary" size="sm" onClick={handleCreateGroup}>
+              Créer
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={showEditGroupModal}
+        onClose={() => setShowEditGroupModal(false)}
+        title="Modifier le groupe"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <Input
+            label="Nom du groupe"
+            value={groupDraft.name}
+            onChange={(event) => setGroupDraft((prev) => ({ ...prev, name: event.target.value }))}
+            placeholder="Nom du groupe"
+          />
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-slate-700">Couleur</p>
+            <div className="flex flex-wrap gap-2">
+              {GROUP_COLOR_OPTIONS.map((color) => (
+                <button
+                  key={color}
+                  className={`h-8 w-8 rounded-full border-2 ${groupDraft.color === color ? 'border-slate-900' : 'border-transparent'}`}
+                  style={{ backgroundColor: color }}
+                  onClick={() => setGroupDraft((prev) => ({ ...prev, color }))}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setShowEditGroupModal(false)}>
+              Annuler
+            </Button>
+            <Button variant="primary" size="sm" onClick={handlePersistGroupEdition}>
+              Enregistrer
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={showImportExportModal}
+        onClose={() => {
+          setShowImportExportModal(false)
+          setImportFile(null)
+        }}
+        title="Import & Export"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Sauvegardez toutes vos données ou importez une sauvegarde existante.
+          </p>
+
+          <div className="space-y-2">
+            <Button variant="primary" size="sm" className="w-full" onClick={handleImportBookmarks}>
+              📥 Importer la barre de favoris
+            </Button>
+
+            <div className="space-y-2">
+              <input
+                type="file"
+                accept=".json"
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (file) {
+                    setImportFile(file)
+                  }
+                }}
+                className="hidden"
+                id="import-json-file"
+              />
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => document.getElementById('import-json-file')?.click()}
+              >
+                📁 Choisir un fichier JSON
+              </Button>
+
+              {importFile && (
+                <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+                  <p className="font-medium text-slate-800">Fichier sélectionné :</p>
+                  <p className="truncate">{importFile.name}</p>
+                  <p className="text-slate-500">{(importFile.size / 1024).toFixed(1)} KB</p>
+
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    className="w-full mt-2"
+                    onClick={() => handleImportData(importFile)}
+                    disabled={!importFile || isImporting}
+                    isLoading={isImporting}
                   >
-                    <div
-                      style={{
-                        width: '24px',
-                        height: '24px',
-                        borderRadius: '50%',
-                        backgroundColor: color,
-                        cursor: 'pointer',
-                        border: editingGroup.color === color ? '3px solid #333' : '2px solid #ddd'
-                      }}
+                    📥 {isImporting ? 'Importation...' : 'Importer les données'}
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            <Button variant="outline" size="sm" className="w-full" onClick={handleExportData}>
+              📤 Exporter en JSON
+            </Button>
+          </div>
+
+          <div className="flex justify-end">
+            <Button variant="ghost" size="sm" onClick={() => {
+              setShowImportExportModal(false)
+              setImportFile(null)
+            }}>
+              Fermer
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={showOpenTabsModal}
+        onClose={() => setShowOpenTabsModal(false)}
+        title="Onglets ouverts"
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={selectAllTabs}>
+                Tout sélectionner
+              </Button>
+              <Button variant="ghost" size="sm" onClick={clearTabSelection}>
+                Tout désélectionner
+              </Button>
+            </div>
+            <span className="text-xs text-slate-500">
+              {selectedTabs.size} onglet(s) sélectionné(s)
+            </span>
+          </div>
+
+          <div className="max-h-80 overflow-y-auto rounded-lg border border-slate-200">
+            {loadingTabs ? (
+              <div className="flex items-center justify-center py-8">
+                <LoadingSpinner size="sm" />
+              </div>
+            ) : openTabs.length === 0 ? (
+              <div className="py-8 text-center text-sm text-slate-500">
+                Aucun onglet détecté dans cette fenêtre.
+              </div>
+            ) : (
+              <ul className="divide-y divide-slate-100 bg-white">
+                {openTabs.map((tab) => {
+                  const isSelected = selectedTabs.has(tab.id)
+                  const isInGroup = groups.some((group) =>
+                    group.urls.some((url) => url.url === tab.url)
+                  )
+
+                  return (
+                    <li
+                      key={tab.id}
+                      className={`flex cursor-pointer items-center gap-3 px-3 py-2 text-sm ${isSelected ? 'bg-indigo-50' : 'bg-white'}`}
+                      onClick={() => toggleTabSelection(tab.id)}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleTabSelection(tab.id)}
+                        className="h-4 w-4"
+                        onClick={(event) => event.stopPropagation()}
+                      />
+                      {tab.favicon && (
+                        <img src={tab.favicon} alt="" className="h-4 w-4 rounded" />
+                      )}
+                      <div className="flex-1 overflow-hidden">
+                        <p className="truncate font-medium text-slate-800">{tab.title}</p>
+                        <p className="truncate text-xs text-slate-500">{tab.url}</p>
+                      </div>
+                      {isInGroup && <span className="text-xs text-green-600">Déjà enregistré</span>}
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+
+          {selectedTabs.size > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-slate-600">Ajouter à un groupe</p>
+              <div className="flex flex-wrap gap-2">
+                {groups.map((group) => (
+                  <Button
+                    key={group.id}
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => handleAddSelectedTabsToGroup(group.id)}
+                  >
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{ backgroundColor: group.color }}
                     />
-                    <span style={{ fontSize: '8px', color: '#666' }}>
-                      {color.replace('#', '')}
-                    </span>
-                  </div>
+                    {group.name}
+                  </Button>
                 ))}
               </div>
             </div>
+          )}
 
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={() => {
-                  setShowEditGroup(false)
-                  setEditingGroup(null)
-                }}
-                style={{
-                  flex: 1,
-                  background: '#f8f9fa',
-                  color: '#333',
-                  border: '1px solid #ddd',
-                  padding: '8px',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '12px'
-                }}
-              >
-                Annuler
-              </button>
-              <button
-                onClick={handleEditGroup}
-                style={{
-                  flex: 1,
-                  background: '#4285f4',
-                  color: 'white',
-                  border: 'none',
-                  padding: '8px',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '12px'
-                }}
-              >
-                Enregistrer
-              </button>
-            </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setShowOpenTabsModal(false)}>
+              Fermer
+            </Button>
+            {groups.length === 0 && (
+              <Button variant="primary" size="sm" onClick={() => {
+                setShowOpenTabsModal(false)
+                setShowAddGroupModal(true)
+              }}>
+                Créer un groupe
+              </Button>
+            )}
           </div>
         </div>
-      )}
+      </Modal>
 
-      {/* Modal Import/Export */}
-      {showImportExport && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1001
-        }}>
-          <div style={{
-            backgroundColor: 'white',
-            padding: '20px',
-            borderRadius: '8px',
-            width: '300px',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
-          }}>
-            <h3 style={{
-              margin: '0 0 16px 0',
-              fontSize: '16px',
-              fontWeight: 'bold'
-            }}>
-              Import / Export
-            </h3>
+      <Modal
+        isOpen={showGroupSelectModal && Boolean(contextMenuData)}
+        onClose={() => {
+          setShowGroupSelectModal(false)
+          setContextMenuData(null)
+        }}
+        title="Ajouter au groupe"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+            <p className="font-medium text-slate-800">{contextMenuData?.title || 'Sans titre'}</p>
+            <p className="break-all text-[11px] text-slate-500">{contextMenuData?.url}</p>
+          </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <button
-                onClick={handleImportBookmarks}
-                style={{
-                  width: '100%',
-                  background: '#34a853',
-                  color: 'white',
-                  border: 'none',
-                  padding: '10px',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '12px'
-                }}
-              >
-                📥 Importer Bookmarks
-              </button>
-
-              <button
-                onClick={handleExportJson}
-                style={{
-                  width: '100%',
-                  background: '#fbbc04',
-                  color: 'white',
-                  border: 'none',
-                  padding: '10px',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '12px'
-                }}
-              >
-                📤 Exporter JSON
-              </button>
+          {groups.length === 0 ? (
+            <p className="text-sm text-slate-600">
+              Aucun groupe disponible. Créez un groupe avant d'ajouter ce lien.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {groups.map((group) => (
+                <Button
+                  key={group.id}
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start gap-3"
+                  onClick={() => handleAddFromContextMenu(group.id)}
+                >
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{ backgroundColor: group.color }}
+                  />
+                  {group.name}
+                  <span className="text-xs text-slate-500">
+                    {group.urls.length} lien(s)
+                  </span>
+                </Button>
+              ))}
             </div>
+          )}
 
-            <button
-              onClick={() => setShowImportExport(false)}
-              style={{
-                width: '100%',
-                background: '#f8f9fa',
-                color: '#333',
-                border: '1px solid #ddd',
-                padding: '10px',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '12px',
-                marginTop: '12px'
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setShowGroupSelectModal(false)
+                setContextMenuData(null)
               }}
             >
               Fermer
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Onglets Ouverts */}
-      {showOpenTabs && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1001
-        }}>
-          <div style={{
-            backgroundColor: 'white',
-            padding: '20px',
-            borderRadius: '8px',
-            width: '400px',
-            maxHeight: '80vh',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{
-                margin: 0,
-                fontSize: '16px',
-                fontWeight: 'bold'
-              }}>
-                Onglets ouverts
-              </h3>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                <button
-                  onClick={selectAllTabs}
-                  style={{
-                    background: '#4285f4',
-                    color: 'white',
-                    border: 'none',
-                    padding: '4px 8px',
-                    borderRadius: '3px',
-                    cursor: 'pointer',
-                    fontSize: '10px'
-                  }}
-                >
-                  Tout sélectionner
-                </button>
-                <button
-                  onClick={clearSelection}
-                  style={{
-                    background: '#ea4335',
-                    color: 'white',
-                    border: 'none',
-                    padding: '4px 8px',
-                    borderRadius: '3px',
-                    cursor: 'pointer',
-                    fontSize: '10px'
-                  }}
-                >
-                  Tout désélectionner
-                </button>
-              </div>
-            </div>
-
-            {loadingTabs ? (
-              <div style={{ textAlign: 'center', padding: '40px 0', color: '#666' }}>
-                Chargement des onglets...
-              </div>
-            ) : openTabs.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px 0', color: '#666' }}>
-                Aucun onglet disponible
-              </div>
-            ) : (
-              <>
-                <div style={{
-                  maxHeight: '300px',
-                  overflowY: 'auto',
-                  marginBottom: '16px',
-                  border: '1px solid #e0e0e0',
-                  borderRadius: '4px'
-                }}>
-                  {openTabs.map((tab) => {
-                    const isInAnyGroup = groups.some(group =>
-                      group.urls.some(url => url.url === tab.url)
-                    )
-
-                    return (
-                      <div
-                        key={tab.id}
-                        onClick={() => toggleTabSelection(tab.id)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          padding: '8px 12px',
-                          borderBottom: '1px solid #f0f0f0',
-                          cursor: 'pointer',
-                          backgroundColor: selectedTabs.has(tab.id) ? '#e8f0fe' : 'white',
-                          '&:hover': {
-                            backgroundColor: selectedTabs.has(tab.id) ? '#d2e3fc' : '#f8f9fa'
-                          }
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedTabs.has(tab.id)}
-                          onChange={() => {}}
-                          style={{
-                            marginRight: '8px',
-                            cursor: 'pointer'
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        {tab.favicon && (
-                          <img
-                            src={tab.favicon}
-                            alt=""
-                            style={{
-                              width: '16px',
-                              height: '16px',
-                              marginRight: '8px',
-                              borderRadius: '2px'
-                            }}
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none'
-                            }}
-                          />
-                        )}
-                        <div style={{ flex: 1, marginRight: '8px' }}>
-                          <div style={{
-                            fontWeight: '500',
-                            color: '#333',
-                            fontSize: '11px',
-                            marginBottom: '2px',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis'
-                          }}>
-                            {tab.title}
-                          </div>
-                          <div style={{
-                            color: '#666',
-                            fontSize: '9px',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis'
-                          }}>
-                            {tab.url}
-                          </div>
-                        </div>
-                        {isInAnyGroup && (
-                          <div
-                            style={{
-                              width: '8px',
-                              height: '8px',
-                              borderRadius: '50%',
-                              backgroundColor: '#34a853',
-                              flexShrink: 0,
-                              title: 'Déjà dans un groupe'
-                            }}
-                          />
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-
-                <div style={{ fontSize: '11px', color: '#666', marginBottom: '12px' }}>
-                  {selectedTabs.size} onglet(s) sélectionné(s) •
-                  <span style={{ color: '#34a853' }}>
-                    {' '}● = déjà dans un groupe
-                  </span>
-                </div>
-
-                {selectedTabs.size > 0 && groups.length > 0 && (
-                  <div style={{ marginBottom: '16px' }}>
-                    <div style={{ fontSize: '11px', color: '#666', marginBottom: '8px' }}>
-                      Ajouter à :
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                      {groups.map((group) => (
-                        <button
-                          key={group.id}
-                          onClick={() => addSelectedTabsToGroup(group.id)}
-                          style={{
-                            background: 'white',
-                            color: '#333',
-                            border: '1px solid #ddd',
-                            padding: '6px 10px',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '10px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: '8px',
-                              height: '8px',
-                              borderRadius: '50%',
-                              backgroundColor: group.color
-                            }}
-                          />
-                          {group.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
+            </Button>
+            {groups.length === 0 && (
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={() => {
-                  setShowOpenTabs(false)
-                  setSelectedTabs(new Set())
-                }}
-                style={{
-                  flex: 1,
-                  background: '#f8f9fa',
-                  color: '#333',
-                  border: '1px solid #ddd',
-                  padding: '10px',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '12px'
-                }}
-              >
-                Fermer
-              </button>
-              {groups.length === 0 && (
-                <button
-                  onClick={() => {
-                    setShowOpenTabs(false)
-                    setShowAddGroup(true)
-                  }}
-                  style={{
-                    flex: 1,
-                    background: '#4285f4',
-                    color: 'white',
-                    border: 'none',
-                    padding: '10px',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '12px'
-                  }}
-                >
-                  Créer un groupe
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Sélection de Groupe (Menu Contextuel) */}
-      {showGroupSelect && contextMenuData && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1002
-        }}>
-          <div style={{
-            backgroundColor: 'white',
-            padding: '20px',
-            borderRadius: '8px',
-            width: '320px',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
-          }}>
-            <h3 style={{
-              margin: '0 0 16px 0',
-              fontSize: '16px',
-              fontWeight: 'bold'
-            }}>
-              Ajouter à un groupe
-            </h3>
-
-            <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
-              <div style={{ fontWeight: 'bold', color: '#333', marginBottom: '4px', fontSize: '12px' }}>
-                {contextMenuData.title || 'Sans titre'}
-              </div>
-              <div style={{ color: '#666', fontSize: '10px', wordBreak: 'break-all' }}>
-                {contextMenuData.url}
-              </div>
-            </div>
-
-            {groups.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '20px 0', color: '#666' }}>
-                Aucun groupe disponible. Créez d&apos;abord un groupe.
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-                {groups.map((group) => (
-                  <button
-                    key={group.id}
-                    onClick={() => handleAddFromContextMenu(group.id)}
-                    style={{
-                      width: '100%',
-                      background: 'white',
-                      color: '#333',
-                      border: '1px solid #ddd',
-                      padding: '12px',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '12px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      textAlign: 'left'
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: '12px',
-                        height: '12px',
-                        borderRadius: '50%',
-                        backgroundColor: group.color,
-                        flexShrink: 0
-                      }}
-                    />
-                    <span style={{ flex: 1 }}>{group.name}</span>
-                    <span style={{ color: '#666', fontSize: '10px' }}>
-                      {group.urls.length}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={() => {
-                  setShowGroupSelect(false)
+                  setShowGroupSelectModal(false)
                   setContextMenuData(null)
-                }}
-                style={{
-                  flex: 1,
-                  background: '#f8f9fa',
-                  color: '#333',
-                  border: '1px solid #ddd',
-                  padding: '10px',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '12px'
+                  setShowAddGroupModal(true)
                 }}
               >
-                Annuler
-              </button>
-              {groups.length === 0 && (
-                <button
-                  onClick={() => {
-                    setShowGroupSelect(false)
-                    setContextMenuData(null)
-                    setShowAddGroup(true)
-                  }}
-                  style={{
-                    flex: 1,
-                    background: '#4285f4',
-                    color: 'white',
-                    border: 'none',
-                    padding: '10px',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '12px'
-                  }}
-                >
-                  Créer un groupe
-                </button>
-              )}
-            </div>
+                Créer un groupe
+              </Button>
+            )}
           </div>
         </div>
-      )}
-    </div>
+      </Modal>
+    </PopupContainer>
   )
 }
 

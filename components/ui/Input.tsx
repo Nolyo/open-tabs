@@ -22,7 +22,7 @@ export function Input({
   const inputId = id || `input-${Math.random().toString(36).substr(2, 9)}`
 
   const baseStyles = [
-    'block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500',
+    'block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500 text-slate-900 placeholder:text-slate-400',
   ]
 
   const errorStyles = error ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''
