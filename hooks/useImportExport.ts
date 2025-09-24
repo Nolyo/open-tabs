@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 export interface ImportExportData {
   groups: any[]
+  profiles: any[]
   settings: any
   version: string
   exportedAt: string
@@ -31,8 +32,9 @@ export function useImportExport(): UseImportExportReturn {
 
       const data: ImportExportData = {
         groups: response.groups || [],
+        profiles: response.profiles || [],
         settings: response.settings || {},
-        version: '1.0',
+        version: '1.1',
         exportedAt: new Date().toISOString(),
       }
 
@@ -65,6 +67,11 @@ export function useImportExport(): UseImportExportReturn {
 
       if (!data.groups || !Array.isArray(data.groups)) {
         throw new Error('Format de fichier invalide')
+      }
+
+      // Valider la structure des profils si présents
+      if (data.profiles && !Array.isArray(data.profiles)) {
+        throw new Error('Format de fichier invalide: profils incorrects')
       }
 
       const response = await chrome.runtime.sendMessage({

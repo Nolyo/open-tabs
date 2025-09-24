@@ -97,6 +97,8 @@ function IndexPopup() {
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null)
   const [contextMenuData, setContextMenuData] = useState<ContextMenuPayload | null>(null)
   const [showGroupSelectModal, setShowGroupSelectModal] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [isImporting, setIsImporting] = useState(false)
 
   useEffect(() => {
     const readContextPayload = async () => {
@@ -464,10 +466,21 @@ function IndexPopup() {
     }
   }
 
-  const handleExportData = () => {
+  const handleExportData = async () => {
     try {
-      const data = JSON.stringify({ groups }, null, 2)
-      const blob = new Blob([data], { type: 'application/json' })
+      const response = await chrome.runtime.sendMessage({
+        action: 'EXPORT_DATA',
+      })
+
+      const data = {
+        groups: response.groups || [],
+        profiles: response.profiles || [],
+        settings: response.settings || {},
+        version: '1.1',
+        exportedAt: new Date().toISOString(),
+      }
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
@@ -478,6 +491,45 @@ function IndexPopup() {
     } catch (error) {
       console.error('Erreur export JSON:', error)
       notificationService.error('Erreur', "Impossible d'exporter les données")
+    }
+  }
+
+  const handleImportData = async (file: File) => {
+    setIsImporting(true)
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+
+      // Valider les données
+      if (!data.groups || !Array.isArray(data.groups)) {
+        throw new Error('Format de fichier invalide: groupes manquants')
+      }
+
+      // Valider les profils si présents
+      if (data.profiles && !Array.isArray(data.profiles)) {
+        throw new Error('Format de fichier invalide: profils incorrects')
+      }
+
+      const response = await chrome.runtime.sendMessage({
+        action: 'IMPORT_DATA',
+        payload: data,
+      })
+
+      if (response && response.error) {
+        throw new Error(response.error)
+      }
+
+      notificationService.success(
+        'Import réussi',
+        `${response.importedGroups} groupe(s) et ${response.importedProfiles || 0} profil(s) importé(s)`
+      )
+      setImportFile(null)
+      setShowImportExportModal(false)
+    } catch (error) {
+      console.error('Erreur import JSON:', error)
+      notificationService.error('Erreur', error instanceof Error ? error.message : "Impossible d'importer les données")
+    } finally {
+      setIsImporting(false)
     }
   }
 
@@ -1039,24 +1091,76 @@ function IndexPopup() {
 
       <Modal
         isOpen={showImportExportModal}
-        onClose={() => setShowImportExportModal(false)}
+        onClose={() => {
+          setShowImportExportModal(false)
+          setImportFile(null)
+        }}
         title="Import & Export"
         size="sm"
       >
         <div className="space-y-4">
           <p className="text-sm text-slate-600">
-            Sauvegardez vos groupes ou importez vos favoris en un clic.
+            Sauvegardez toutes vos données ou importez une sauvegarde existante.
           </p>
+
           <div className="space-y-2">
             <Button variant="primary" size="sm" className="w-full" onClick={handleImportBookmarks}>
               📥 Importer la barre de favoris
             </Button>
+
+            <div className="space-y-2">
+              <input
+                type="file"
+                accept=".json"
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (file) {
+                    setImportFile(file)
+                  }
+                }}
+                className="hidden"
+                id="import-json-file"
+              />
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => document.getElementById('import-json-file')?.click()}
+              >
+                📁 Choisir un fichier JSON
+              </Button>
+
+              {importFile && (
+                <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+                  <p className="font-medium text-slate-800">Fichier sélectionné :</p>
+                  <p className="truncate">{importFile.name}</p>
+                  <p className="text-slate-500">{(importFile.size / 1024).toFixed(1)} KB</p>
+
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    className="w-full mt-2"
+                    onClick={() => handleImportData(importFile)}
+                    disabled={!importFile || isImporting}
+                    isLoading={isImporting}
+                  >
+                    📥 {isImporting ? 'Importation...' : 'Importer les données'}
+                  </Button>
+                </div>
+              )}
+            </div>
+
             <Button variant="outline" size="sm" className="w-full" onClick={handleExportData}>
               📤 Exporter en JSON
             </Button>
           </div>
+
           <div className="flex justify-end">
-            <Button variant="ghost" size="sm" onClick={() => setShowImportExportModal(false)}>
+            <Button variant="ghost" size="sm" onClick={() => {
+              setShowImportExportModal(false)
+              setImportFile(null)
+            }}>
               Fermer
             </Button>
           </div>
