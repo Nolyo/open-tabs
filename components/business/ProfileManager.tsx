@@ -233,7 +233,13 @@ export function ProfileManager() {
                   <label className="block text-sm font-medium text-gray-700">Écraser un profil existant</label>
                   <select
                     className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-black shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    style={{ color: '#000000', backgroundColor: '#ffffff' }}
+                    style={{
+                      color: '#000000',
+                      backgroundColor: '#ffffff',
+                      WebkitAppearance: 'none',
+                      MozAppearance: 'none',
+                      appearance: 'none'
+                    }}
                     value={selectedProfileId || ''}
                     onChange={(event) => {
                       const value = event.target.value || null
@@ -250,9 +256,19 @@ export function ProfileManager() {
                       }
                     }}
                   >
-                    <option value="" style={{ color: '#374151', backgroundColor: '#ffffff', fontWeight: 'normal' }}>Nouvelle sauvegarde</option>
+                    <option value="" style={{
+                      color: '#374151',
+                      backgroundColor: '#ffffff',
+                      fontWeight: 'normal',
+                      padding: '8px 12px'
+                    }}>Nouvelle sauvegarde</option>
                     {summaries.map(summary => (
-                      <option key={summary.id} value={summary.id} style={{ color: '#111827', backgroundColor: '#ffffff', fontWeight: 'normal' }}>
+                      <option key={summary.id} value={summary.id} style={{
+                        color: '#111827',
+                        backgroundColor: '#ffffff',
+                        fontWeight: 'normal',
+                        padding: '8px 12px'
+                      }}>
                         {summary.name} ({summary.tabCount} onglet{summary.tabCount > 1 ? 's' : ''})
                       </option>
                     ))}
