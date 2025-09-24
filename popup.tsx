@@ -99,6 +99,7 @@ function IndexPopup() {
   const [showGroupSelectModal, setShowGroupSelectModal] = useState(false)
   const [importFile, setImportFile] = useState<File | null>(null)
   const [isImporting, setIsImporting] = useState(false)
+  const [activeTab, setActiveTab] = useState<'profiles' | 'groups'>('profiles')
 
   useEffect(() => {
     const readContextPayload = async () => {
@@ -624,165 +625,199 @@ function IndexPopup() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            variant="primary"
-            size="sm"
-            className="justify-start gap-2"
-            onClick={handleQuickCapture}
-            isLoading={isCapturing}
+        {/* Tabs Navigation */}
+        <div className="flex border-b border-slate-200">
+          <button
+            className={`flex-1 py-2 px-4 text-center text-sm font-medium transition-colors ${
+              activeTab === 'profiles'
+                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+            }`}
+            onClick={() => setActiveTab('profiles')}
           >
-            📸 Capturer la session
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="justify-start gap-2"
-            onClick={() => setShowOpenTabsModal(true)}
+            Profils
+          </button>
+          <button
+            className={`flex-1 py-2 px-4 text-center text-sm font-medium transition-colors ${
+              activeTab === 'groups'
+                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+            }`}
+            onClick={() => setActiveTab('groups')}
           >
-            ➕ Ajouter des onglets
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="justify-start gap-2"
-            onClick={() => setShowImportExportModal(true)}
-          >
-            📁 Import / Export
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="justify-start gap-2"
-            onClick={() => setShowAddGroupModal(true)}
-          >
-            ✨ Nouveau groupe
-          </Button>
+            Groupes
+          </button>
         </div>
 
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-800">Profils enregistrés</h2>
-            {summaries.length > 1 && (
-              <button
-                className="text-xs text-slate-500 underline hover:text-slate-700"
-                onClick={handleOpenAllGroups}
+        {/* Tab Content */}
+        {activeTab === 'profiles' && (
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                className="flex-1 justify-start gap-2"
+                onClick={handleQuickCapture}
+                isLoading={isCapturing}
               >
-                Ouvrir tous les groupes
-              </button>
-            )}
-          </div>
-
-          {areProfilesLoading ? (
-            <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white py-6">
-              <LoadingSpinner size="sm" />
+                📸 Capturer la session
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="justify-start gap-2"
+                onClick={() => setShowImportExportModal(true)}
+              >
+                📁 Import / Export
+              </Button>
             </div>
-          ) : summaries.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
-              Capturez votre première session pour créer un profil.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {summaries.map((summary) => (
-                <div
-                  key={summary.id}
-                  className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-semibold text-slate-900">{summary.name}</h3>
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
-                          {summary.tabCount} onglet(s)
-                        </span>
-                      </div>
-                      {summary.description && (
-                        <p className="mt-1 text-xs text-slate-500">{summary.description}</p>
-                      )}
-                      <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
-                        <span>{summary.groupCount} groupe(s)</span>
-                        <span>MàJ {new Date(summary.updatedAt).toLocaleDateString('fr-FR')}</span>
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => handleOpenProfile(summary.id)}
-                        isLoading={isOpening}
-                      >
-                        Ouvrir ici
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleOpenProfile(summary.id, true)}
-                        isLoading={isOpening}
-                      >
-                        Nouvelle fenêtre
-                      </Button>
-                    </div>
-                  </div>
 
-                  <div className="mt-3 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-3">
-                      <button
-                        className="text-slate-500 hover:text-slate-700"
-                        onClick={() => handleReplaceProfile(summary)}
-                        disabled={isCapturing}
-                      >
-                        Actualiser avec la session courante
-                      </button>
-                      <button
-                        className="text-slate-400 hover:text-red-500"
-                        onClick={() => setProfileToDelete(summary)}
-                        disabled={isDeleting}
-                      >
-                        Supprimer
-                      </button>
-                    </div>
-                    <button
-                      className="text-slate-400 hover:text-slate-600"
-                      onClick={() => setExpandedGroupId((prev) => (prev === summary.id ? null : summary.id))}
-                    >
-                      {expandedGroupId === summary.id ? 'Masquer' : 'Détails'}
-                    </button>
-                  </div>
+            <section className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-slate-800">Profils enregistrés</h2>
+                {summaries.length > 1 && (
+                  <button
+                    className="text-xs text-slate-500 underline hover:text-slate-700"
+                    onClick={handleOpenAllGroups}
+                  >
+                    Ouvrir tous les groupes
+                  </button>
+                )}
+              </div>
 
-                  {expandedGroupId === summary.id && (
-                    <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600">
-                      {profiles
-                        .find((profile) => profile.id === summary.id)?.groups.slice(0, 4)
-                        .map((group) => (
-                          <div key={group.id} className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span
-                                className="h-2 w-2 rounded-full"
-                                style={{ backgroundColor: group.color || '#4A90E2' }}
-                              />
-                              <span className="font-medium text-slate-800">{group.title}</span>
-                            </div>
-                            <span>{group.tabs.length} onglet(s)</span>
-                          </div>
-                        ))}
-                      {profiles.find((profile) => profile.id === summary.id)?.groups.length! > 4 && (
-                        <p className="mt-2 italic text-slate-500">
-                          + {profiles.find((profile) => profile.id === summary.id)?.groups.length! - 4} autres groupes
-                        </p>
-                      )}
-                    </div>
-                  )}
+              {areProfilesLoading ? (
+                <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white py-6">
+                  <LoadingSpinner size="sm" />
                 </div>
-              ))}
-            </div>
-          )}
-        </section>
+              ) : summaries.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
+                  Capturez votre première session pour créer un profil.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {summaries.map((summary) => (
+                    <div
+                      key={summary.id}
+                      className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-semibold text-slate-900">{summary.name}</h3>
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+                              {summary.tabCount} onglet(s)
+                            </span>
+                          </div>
+                          {summary.description && (
+                            <p className="mt-1 text-xs text-slate-500">{summary.description}</p>
+                          )}
+                          <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
+                            <span>{summary.groupCount} groupe(s)</span>
+                            <span>MàJ {new Date(summary.updatedAt).toLocaleDateString('fr-FR')}</span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => handleOpenProfile(summary.id)}
+                            isLoading={isOpening}
+                          >
+                            Ouvrir ici
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenProfile(summary.id, true)}
+                            isLoading={isOpening}
+                          >
+                            Nouvelle fenêtre
+                          </Button>
+                        </div>
+                      </div>
 
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-800">Groupes enregistrés</h2>
-            <span className="text-xs text-slate-500">{groups.length} groupe(s)</span>
+                      <div className="mt-3 flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-3">
+                          <button
+                            className="text-slate-500 hover:text-slate-700"
+                            onClick={() => handleReplaceProfile(summary)}
+                            disabled={isCapturing}
+                          >
+                            Actualiser avec la session courante
+                          </button>
+                          <button
+                            className="text-slate-400 hover:text-red-500"
+                            onClick={() => setProfileToDelete(summary)}
+                            disabled={isDeleting}
+                          >
+                            Supprimer
+                          </button>
+                        </div>
+                        <button
+                          className="text-slate-400 hover:text-slate-600"
+                          onClick={() => setExpandedGroupId((prev) => (prev === summary.id ? null : summary.id))}
+                        >
+                          {expandedGroupId === summary.id ? 'Masquer' : 'Détails'}
+                        </button>
+                      </div>
+
+                      {expandedGroupId === summary.id && (
+                        <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600">
+                          {profiles
+                            .find((profile) => profile.id === summary.id)?.groups.slice(0, 4)
+                            .map((group) => (
+                              <div key={group.id} className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className="h-2 w-2 rounded-full"
+                                    style={{ backgroundColor: group.color || '#4A90E2' }}
+                                  />
+                                  <span className="font-medium text-slate-800">{group.title}</span>
+                                </div>
+                                <span>{group.tabs.length} onglet(s)</span>
+                              </div>
+                            ))}
+                          {profiles.find((profile) => profile.id === summary.id)?.groups.length! > 4 && (
+                            <p className="mt-2 italic text-slate-500">
+                              + {profiles.find((profile) => profile.id === summary.id)?.groups.length! - 4} autres groupes
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
           </div>
+        )}
+
+        {activeTab === 'groups' && (
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                className="flex-1 justify-start gap-2"
+                onClick={() => setShowOpenTabsModal(true)}
+              >
+                ➕ Ajouter des onglets
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="justify-start gap-2"
+                onClick={() => setShowAddGroupModal(true)}
+              >
+                ✨ Nouveau groupe
+              </Button>
+            </div>
+
+            <section className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-slate-800">Groupes enregistrés</h2>
+                <span className="text-xs text-slate-500">{groups.length} groupe(s)</span>
+              </div>
 
           <SearchBar
             value={groupSearchTerm}
@@ -898,6 +933,8 @@ function IndexPopup() {
             </div>
           )}
         </section>
+      </div>
+    )}
       </PopupContent>
 
       <PopupFooter
