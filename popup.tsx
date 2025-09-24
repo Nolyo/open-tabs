@@ -193,7 +193,7 @@ function IndexPopup() {
       return
     }
 
-    const defaultName = `Session du ${new Date().toLocaleString('fr-FR')}`
+    const defaultName = new Date().toLocaleString('fr-FR')
     setProfileName(defaultName)
     setProfileDescription('')
     setSelectedProfileId(null)

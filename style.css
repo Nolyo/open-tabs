@@ -53,6 +53,25 @@ body {
   width: 8px;
 }
 
+/* Contraste forcé pour les cartes en thème sombre */
+[data-theme="dark"] .bg-white {
+  background-color: #4a4a4a !important;
+}
+
+[data-theme="dark"] .rounded-lg.border {
+  background-color: #4a4a4a !important;
+  border-color: #666666 !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+[data-theme="dark"] .divide-y > * {
+  border-color: #666666 !important;
+}
+
+[data-theme="dark"] .border-gray-200 {
+  border-color: #666666 !important;
+}
+
 ::-webkit-scrollbar-track {
   background: var(--bg-secondary);
 }

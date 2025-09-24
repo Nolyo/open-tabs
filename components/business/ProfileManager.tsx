@@ -41,7 +41,7 @@ export function ProfileManager() {
   const [expandedProfileId, setExpandedProfileId] = useState<string | null>(null)
 
   const defaultProfileName = useMemo(() => {
-    return `Session du ${new Date().toLocaleString()}`
+    return new Date().toLocaleString()
   }, [snapshot?.meta?.tabCount])
 
   
@@ -125,11 +125,7 @@ export function ProfileManager() {
   return (
     <section className="space-y-4">
       <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">Profils de navigation</h2>
-          <p className="text-sm text-gray-500">Capturez vos groupes d\'onglets en un clic et restaurez-les à la demande.</p>
-        </div>
-        <div className="text-right text-xs text-gray-500">
+        <div className="text-right text-xs text-gray-500" style={{ color: 'var(--text-tertiary)' }}>
           <p>{totalProfiles} profil{totalProfiles > 1 ? 's' : ''}</p>
           <p>{totalTabsAcrossProfiles} onglet{totalTabsAcrossProfiles > 1 ? 's' : ''}</p>
         </div>
