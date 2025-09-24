@@ -13,10 +13,13 @@ export function PopupFooter({
   return (
     <div
       className={`
-        flex items-center justify-between p-4 border-t border-gray-200
-        bg-gray-50
+        flex items-center justify-between p-4 border-t
         ${className}
       `}
+      style={{
+        backgroundColor: 'var(--bg-tertiary)',
+        borderColor: 'var(--border-primary)'
+      }}
     >
       <div className="flex items-center space-x-2">
         {children}

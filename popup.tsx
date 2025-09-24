@@ -576,7 +576,7 @@ function IndexPopup() {
   }
 
   return (
-    <PopupContainer className="w-[384px] bg-slate-900/5">
+    <PopupContainer className="w-[384px]" style={{ backgroundColor: 'var(--bg-primary)' }}>
       <NotificationManager />
 
       <PopupHeader
@@ -587,7 +587,7 @@ function IndexPopup() {
             <Button
               variant="ghost"
               size="sm"
-              className="text-white/90 hover:bg-white/20"
+              className="text-white hover:bg-white/30 border border-white/20 backdrop-blur-sm"
               onClick={toggleTheme}
             >
               {theme === 'light' ? '🌙' : '☀️'}
@@ -595,7 +595,7 @@ function IndexPopup() {
             <Button
               variant="ghost"
               size="sm"
-              className="text-white/90 hover:bg-white/20"
+              className="text-white hover:bg-white/30 border border-white/20 backdrop-blur-sm"
               onClick={() => chrome.runtime.openOptionsPage?.()}
             >
               ⚙️
@@ -612,7 +612,7 @@ function IndexPopup() {
         </div>
       </PopupHeader>
 
-      <PopupContent className="flex-1 overflow-y-auto bg-slate-50 p-4 space-y-6">
+      <PopupContent className="flex-1 overflow-y-auto p-4 space-y-6" style={{ backgroundColor: 'var(--bg-secondary)' }}>
         {profilesError && (
           <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             <span>{profilesError}</span>
@@ -626,13 +626,17 @@ function IndexPopup() {
         )}
 
         {/* Tabs Navigation */}
-        <div className="flex border-b border-slate-200">
+        <div className="flex border-b" style={{ borderColor: 'var(--border-primary)' }}>
           <button
             className={`flex-1 py-2 px-4 text-center text-sm font-medium transition-colors ${
               activeTab === 'profiles'
                 ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+                : 'hover:bg-gray-100 dark:hover:bg-gray-700'
             }`}
+            style={{
+              color: activeTab === 'profiles' ? '#2563eb' : 'var(--text-secondary)',
+              backgroundColor: activeTab === 'profiles' ? '#eff6ff' : 'transparent'
+            }}
             onClick={() => setActiveTab('profiles')}
           >
             Profils
@@ -641,8 +645,12 @@ function IndexPopup() {
             className={`flex-1 py-2 px-4 text-center text-sm font-medium transition-colors ${
               activeTab === 'groups'
                 ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+                : 'hover:bg-gray-100 dark:hover:bg-gray-700'
             }`}
+            style={{
+              color: activeTab === 'groups' ? '#2563eb' : 'var(--text-secondary)',
+              backgroundColor: activeTab === 'groups' ? '#eff6ff' : 'transparent'
+            }}
             onClick={() => setActiveTab('groups')}
           >
             Groupes
@@ -656,28 +664,44 @@ function IndexPopup() {
               <Button
                 variant="primary"
                 size="sm"
-                className="flex-1 justify-start gap-2"
+                className="flex-1 justify-start gap-2 border"
                 onClick={handleQuickCapture}
                 isLoading={isCapturing}
+                style={{
+                  backgroundColor: '#8b5cf6',
+                  borderColor: '#7c3aed',
+                  borderWidth: '1px',
+                  borderStyle: 'solid'
+                }}
               >
                 📸 Capturer la session
               </Button>
+              {/*
               <Button
                 variant="outline"
                 size="sm"
-                className="justify-start gap-2"
+                className="justify-start gap-2 border"
                 onClick={() => setShowImportExportModal(true)}
+                style={{
+                  backgroundColor: 'var(--bg-secondary)',
+                  color: 'var(--text-primary)',
+                  borderColor: 'var(--border-primary)',
+                  borderWidth: '1px',
+                  borderStyle: 'solid'
+                }}
               >
                 📁 Import / Export
               </Button>
+              */}
             </div>
 
             <section className="space-y-3">
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-slate-800">Profils enregistrés</h2>
+                <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Profils enregistrés</h2>
                 {summaries.length > 1 && (
                   <button
-                    className="text-xs text-slate-500 underline hover:text-slate-700"
+                    className="text-xs underline"
+                    style={{ color: 'var(--text-tertiary)' }}
                     onClick={handleOpenAllGroups}
                   >
                     Ouvrir tous les groupes
@@ -686,11 +710,18 @@ function IndexPopup() {
               </div>
 
               {areProfilesLoading ? (
-                <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white py-6">
+                <div className="flex items-center justify-center rounded-xl border py-6" style={{
+                  backgroundColor: 'var(--bg-tertiary)',
+                  borderColor: 'var(--border-primary)'
+                }}>
                   <LoadingSpinner size="sm" />
                 </div>
               ) : summaries.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
+                <div className="rounded-xl border border-dashed px-4 py-6 text-center text-sm" style={{
+                  backgroundColor: 'var(--bg-tertiary)',
+                  borderColor: 'var(--border-primary)',
+                  color: 'var(--text-tertiary)'
+                }}>
                   Capturez votre première session pour créer un profil.
                 </div>
               ) : (
@@ -698,20 +729,27 @@ function IndexPopup() {
                   {summaries.map((summary) => (
                     <div
                       key={summary.id}
-                      className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                      className="rounded-xl border p-4 shadow-sm"
+                      style={{
+                        backgroundColor: 'var(--bg-tertiary)',
+                        borderColor: 'var(--border-primary)'
+                      }}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <div className="flex items-center gap-2">
-                            <h3 className="text-sm font-semibold text-slate-900">{summary.name}</h3>
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+                            <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{summary.name}</h3>
+                            <span className="rounded-full px-2 py-0.5 text-[11px]" style={{
+                              backgroundColor: 'var(--bg-secondary)',
+                              color: 'var(--text-secondary)'
+                            }}>
                               {summary.tabCount} onglet(s)
                             </span>
                           </div>
                           {summary.description && (
-                            <p className="mt-1 text-xs text-slate-500">{summary.description}</p>
+                            <p className="mt-1 text-xs" style={{ color: 'var(--text-tertiary)' }}>{summary.description}</p>
                           )}
-                          <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
+                          <div className="mt-2 flex flex-wrap gap-2 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
                             <span>{summary.groupCount} groupe(s)</span>
                             <span>MàJ {new Date(summary.updatedAt).toLocaleDateString('fr-FR')}</span>
                           </div>
@@ -722,6 +760,13 @@ function IndexPopup() {
                             size="sm"
                             onClick={() => handleOpenProfile(summary.id)}
                             isLoading={isOpening}
+                            style={{
+                              backgroundColor: '#10b981',
+                              borderColor: '#059669',
+                              borderWidth: '1px',
+                              borderStyle: 'solid'
+                            }}
+                            className="border hover:bg-green-600"
                           >
                             Ouvrir ici
                           </Button>
@@ -730,6 +775,14 @@ function IndexPopup() {
                             size="sm"
                             onClick={() => handleOpenProfile(summary.id, true)}
                             isLoading={isOpening}
+                            style={{
+                              backgroundColor: 'var(--bg-secondary)',
+                              color: 'var(--text-primary)',
+                              borderColor: 'var(--border-primary)',
+                              borderWidth: '1px',
+                              borderStyle: 'solid'
+                            }}
+                            className="border hover:bg-gray-200 dark:hover:bg-gray-700"
                           >
                             Nouvelle fenêtre
                           </Button>
@@ -762,7 +815,11 @@ function IndexPopup() {
                       </div>
 
                       {expandedGroupId === summary.id && (
-                        <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600">
+                        <div className="mt-3 rounded-lg border p-3 text-xs" style={{
+                          backgroundColor: 'var(--bg-secondary)',
+                          borderColor: 'var(--border-primary)',
+                          color: 'var(--text-tertiary)'
+                        }}>
                           {profiles
                             .find((profile) => profile.id === summary.id)?.groups.slice(0, 4)
                             .map((group) => (
@@ -772,13 +829,13 @@ function IndexPopup() {
                                     className="h-2 w-2 rounded-full"
                                     style={{ backgroundColor: group.color || '#4A90E2' }}
                                   />
-                                  <span className="font-medium text-slate-800">{group.title}</span>
+                                  <span className="font-medium" style={{ color: 'var(--text-primary)' }}>{group.title}</span>
                                 </div>
-                                <span>{group.tabs.length} onglet(s)</span>
+                                <span style={{ color: 'var(--text-tertiary)' }}>{group.tabs.length} onglet(s)</span>
                               </div>
                             ))}
                           {profiles.find((profile) => profile.id === summary.id)?.groups.length! > 4 && (
-                            <p className="mt-2 italic text-slate-500">
+                            <p className="mt-2 italic" style={{ color: 'var(--text-tertiary)' }}>
                               + {profiles.find((profile) => profile.id === summary.id)?.groups.length! - 4} autres groupes
                             </p>
                           )}
@@ -798,16 +855,30 @@ function IndexPopup() {
               <Button
                 variant="secondary"
                 size="sm"
-                className="flex-1 justify-start gap-2"
+                className="flex-1 justify-start gap-2 border"
                 onClick={() => setShowOpenTabsModal(true)}
+                style={{
+                  backgroundColor: '#f59e0b',
+                  borderColor: '#d97706',
+                  borderWidth: '1px',
+                  borderStyle: 'solid',
+                  color: 'white'
+                }}
               >
                 ➕ Ajouter des onglets
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className="justify-start gap-2"
+                className="justify-start gap-2 border"
                 onClick={() => setShowAddGroupModal(true)}
+                style={{
+                  backgroundColor: '#06b6d4',
+                  borderColor: '#0891b2',
+                  borderWidth: '1px',
+                  borderStyle: 'solid',
+                  color: 'white'
+                }}
               >
                 ✨ Nouveau groupe
               </Button>
@@ -815,8 +886,8 @@ function IndexPopup() {
 
             <section className="space-y-3">
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-slate-800">Groupes enregistrés</h2>
-                <span className="text-xs text-slate-500">{groups.length} groupe(s)</span>
+                <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Groupes enregistrés</h2>
+                <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{groups.length} groupe(s)</span>
               </div>
 
           <SearchBar
@@ -824,15 +895,22 @@ function IndexPopup() {
             onChange={setGroupSearchTerm}
             onClear={() => setGroupSearchTerm('')}
             placeholder="Rechercher un groupe ou une URL"
-            className="bg-white"
+            style={{ backgroundColor: 'var(--bg-tertiary)' }}
           />
 
           {areGroupsLoading ? (
-            <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white py-6">
+            <div className="flex items-center justify-center rounded-xl border py-6" style={{
+              backgroundColor: 'var(--bg-tertiary)',
+              borderColor: 'var(--border-primary)'
+            }}>
               <LoadingSpinner size="sm" />
             </div>
           ) : filteredGroups.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
+            <div className="rounded-xl border border-dashed px-4 py-6 text-center text-sm" style={{
+              backgroundColor: 'var(--bg-tertiary)',
+              borderColor: 'var(--border-primary)',
+              color: 'var(--text-tertiary)'
+            }}>
               Aucun groupe ne correspond à votre recherche.
             </div>
           ) : (
@@ -842,7 +920,11 @@ function IndexPopup() {
                 return (
                   <div
                     key={group.id}
-                    className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                    className="rounded-xl border p-4 shadow-sm"
+                    style={{
+                      backgroundColor: 'var(--bg-tertiary)',
+                      borderColor: 'var(--border-primary)'
+                    }}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3">
@@ -851,8 +933,8 @@ function IndexPopup() {
                           style={{ backgroundColor: group.color }}
                         />
                         <div>
-                          <p className="text-sm font-semibold text-slate-900">{group.name}</p>
-                          <div className="text-xs text-slate-500">
+                          <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{group.name}</p>
+                          <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
                             {group.urls.length} lien(s) sauvegardé(s)
                           </div>
                         </div>
@@ -862,6 +944,14 @@ function IndexPopup() {
                           variant="secondary"
                           size="sm"
                           onClick={() => handleAddCurrentTabToGroup(group.id)}
+                          style={{
+                            backgroundColor: 'var(--bg-secondary)',
+                            color: 'var(--text-primary)',
+                            borderColor: 'var(--border-primary)',
+                            borderWidth: '1px',
+                            borderStyle: 'solid'
+                          }}
+                          className="border"
                         >
                           + Onglet actif
                         </Button>
@@ -869,6 +959,14 @@ function IndexPopup() {
                           variant="outline"
                           size="sm"
                           onClick={() => handleOpenGroup(group.id)}
+                          style={{
+                            backgroundColor: '#3b82f6',
+                            color: 'white',
+                            borderColor: '#2563eb',
+                            borderWidth: '1px',
+                            borderStyle: 'solid'
+                          }}
+                          className="border hover:bg-blue-600"
                         >
                           Ouvrir
                         </Button>
@@ -878,26 +976,30 @@ function IndexPopup() {
                     <div className="mt-3 flex items-center justify-between text-xs">
                       <div className="flex items-center gap-3">
                         <button
-                          className="text-slate-500 hover:text-slate-700"
+                          className="hover:text-slate-700"
+                          style={{ color: 'var(--text-secondary)' }}
                           onClick={() => setExpandedGroupId(isExpanded ? null : group.id)}
                         >
                           {isExpanded ? 'Masquer les liens' : 'Voir les liens'}
                         </button>
                         <button
-                          className="text-slate-400 hover:text-slate-600"
+                          className="hover:text-slate-600"
+                          style={{ color: 'var(--text-tertiary)' }}
                           onClick={() => handleEditGroup(group)}
                         >
                           Renommer / couleur
                         </button>
                         <button
-                          className="text-slate-400 hover:text-red-500"
+                          className="hover:text-red-500"
+                          style={{ color: 'var(--text-tertiary)' }}
                           onClick={() => handleRemoveGroup(group.id)}
                         >
                           Supprimer
                         </button>
                       </div>
                       <button
-                        className="text-slate-400 hover:text-slate-600"
+                        className="hover:text-slate-600"
+                        style={{ color: 'var(--text-tertiary)' }}
                         onClick={() => setShowOpenTabsModal(true)}
                       >
                         Ajouter des onglets…
@@ -905,15 +1007,20 @@ function IndexPopup() {
                     </div>
 
                     {isExpanded && (
-                      <div className="mt-3 space-y-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600">
+                      <div className="mt-3 space-y-2 rounded-lg border p-3 text-xs" style={{
+                          backgroundColor: 'var(--bg-secondary)',
+                          borderColor: 'var(--border-primary)',
+                          color: 'var(--text-tertiary)'
+                        }}>
                         {group.urls.slice(0, 5).map((url) => (
                           <div key={url.id} className="flex items-start justify-between gap-2">
                             <div>
-                              <p className="text-slate-800">{url.title || 'Sans titre'}</p>
-                              <p className="break-all text-[11px] text-slate-500">{url.url}</p>
+                              <p style={{ color: 'var(--text-primary)' }}>{url.title || 'Sans titre'}</p>
+                              <p className="break-all text-[11px]" style={{ color: 'var(--text-tertiary)' }}>{url.url}</p>
                             </div>
                             <button
-                              className="text-slate-400 hover:text-red-500"
+                              className="hover:text-red-500"
+                              style={{ color: 'var(--text-tertiary)' }}
                               onClick={() => handleRemoveUrlFromGroup(group.id, url.id)}
                             >
                               Supprimer
@@ -921,7 +1028,7 @@ function IndexPopup() {
                           </div>
                         ))}
                         {group.urls.length > 5 && (
-                          <p className="italic text-slate-500">
+                          <p className="italic" style={{ color: 'var(--text-tertiary)' }}>
                             + {group.urls.length - 5} lien(s) supplémentaire(s)
                           </p>
                         )}
@@ -938,10 +1045,10 @@ function IndexPopup() {
       </PopupContent>
 
       <PopupFooter
-        className="bg-white"
-        actions={<span className="text-xs text-slate-500">{groups.length} groupe(s)</span>}
+        style={{ backgroundColor: 'var(--bg-tertiary)' }}
+        actions={<span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{groups.length} groupe(s)</span>}
       >
-        <span className="text-xs text-slate-500">{summaries.length} profil(s)</span>
+        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{summaries.length} profil(s)</span>
       </PopupFooter>
 
       <Modal
@@ -1008,8 +1115,12 @@ function IndexPopup() {
           )}
 
           {snapshot && (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-              <p className="font-medium text-slate-800">Capture en attente</p>
+            <div className="rounded-lg border p-3 text-xs" style={{
+              backgroundColor: 'var(--bg-secondary)',
+              borderColor: 'var(--border-primary)',
+              color: 'var(--text-tertiary)'
+            }}>
+              <p className="font-medium" style={{ color: 'var(--text-primary)' }}>Capture en attente</p>
               <p>
                 {snapshot.meta.groupCount} groupe(s) • {snapshot.meta.tabCount} onglet(s)
               </p>
@@ -1169,10 +1280,13 @@ function IndexPopup() {
               </Button>
 
               {importFile && (
-                <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
-                  <p className="font-medium text-slate-800">Fichier sélectionné :</p>
+                <div className="rounded-lg p-3 text-xs" style={{
+                  backgroundColor: 'var(--bg-secondary)',
+                  color: 'var(--text-tertiary)'
+                }}>
+                  <p className="font-medium" style={{ color: 'var(--text-primary)' }}>Fichier sélectionné :</p>
                   <p className="truncate">{importFile.name}</p>
-                  <p className="text-slate-500">{(importFile.size / 1024).toFixed(1)} KB</p>
+                  <p style={{ color: 'var(--text-tertiary)' }}>{(importFile.size / 1024).toFixed(1)} KB</p>
 
                   <Button
                     variant="primary"
@@ -1225,17 +1339,20 @@ function IndexPopup() {
             </span>
           </div>
 
-          <div className="max-h-80 overflow-y-auto rounded-lg border border-slate-200">
+          <div className="max-h-80 overflow-y-auto rounded-lg border" style={{ borderColor: 'var(--border-primary)' }}>
             {loadingTabs ? (
               <div className="flex items-center justify-center py-8">
                 <LoadingSpinner size="sm" />
               </div>
             ) : openTabs.length === 0 ? (
-              <div className="py-8 text-center text-sm text-slate-500">
+              <div className="py-8 text-center text-sm" style={{ color: 'var(--text-tertiary)' }}>
                 Aucun onglet détecté dans cette fenêtre.
               </div>
             ) : (
-              <ul className="divide-y divide-slate-100 bg-white">
+              <ul className="divide-y bg-white" style={{
+                backgroundColor: 'var(--bg-tertiary)',
+                borderColor: 'var(--border-primary)'
+              }}>
                 {openTabs.map((tab) => {
                   const isSelected = selectedTabs.has(tab.id)
                   const isInGroup = groups.some((group) =>
@@ -1245,7 +1362,10 @@ function IndexPopup() {
                   return (
                     <li
                       key={tab.id}
-                      className={`flex cursor-pointer items-center gap-3 px-3 py-2 text-sm ${isSelected ? 'bg-indigo-50' : 'bg-white'}`}
+                      className={`flex cursor-pointer items-center gap-3 px-3 py-2 text-sm ${isSelected ? 'bg-indigo-50' : ''}`}
+                      style={{
+                        backgroundColor: isSelected ? '#eff6ff' : 'var(--bg-tertiary)'
+                      }}
                       onClick={() => toggleTabSelection(tab.id)}
                     >
                       <input
@@ -1259,10 +1379,10 @@ function IndexPopup() {
                         <img src={tab.favicon} alt="" className="h-4 w-4 rounded" />
                       )}
                       <div className="flex-1 overflow-hidden">
-                        <p className="truncate font-medium text-slate-800">{tab.title}</p>
-                        <p className="truncate text-xs text-slate-500">{tab.url}</p>
+                        <p className="truncate font-medium" style={{ color: 'var(--text-primary)' }}>{tab.title}</p>
+                        <p className="truncate text-xs" style={{ color: 'var(--text-tertiary)' }}>{tab.url}</p>
                       </div>
-                      {isInGroup && <span className="text-xs text-green-600">Déjà enregistré</span>}
+                      {isInGroup && <span className="text-xs" style={{ color: '#16a34a' }}>Déjà enregistré</span>}
                     </li>
                   )
                 })}
@@ -1319,13 +1439,17 @@ function IndexPopup() {
         size="sm"
       >
         <div className="space-y-4">
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-            <p className="font-medium text-slate-800">{contextMenuData?.title || 'Sans titre'}</p>
-            <p className="break-all text-[11px] text-slate-500">{contextMenuData?.url}</p>
+          <div className="rounded-lg border p-3 text-xs" style={{
+            backgroundColor: 'var(--bg-secondary)',
+            borderColor: 'var(--border-primary)',
+            color: 'var(--text-tertiary)'
+          }}>
+            <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{contextMenuData?.title || 'Sans titre'}</p>
+            <p className="break-all text-[11px]">{contextMenuData?.url}</p>
           </div>
 
           {groups.length === 0 ? (
-            <p className="text-sm text-slate-600">
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
               Aucun groupe disponible. Créez un groupe avant d'ajouter ce lien.
             </p>
           ) : (

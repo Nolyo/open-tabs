@@ -41,17 +41,19 @@ export function Modal({
 
       <div
         className={`
-          relative bg-white rounded-lg shadow-xl max-h-[90vh] overflow-hidden
+          relative rounded-lg shadow-xl max-h-[90vh] overflow-hidden
           ${modalSizeClass} w-full mx-4 transform transition-all
           ${className}
         `}
+        style={{ backgroundColor: 'var(--bg-tertiary)' }}
       >
         {title && (
-          <div className="flex items-center justify-between p-4 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+          <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: 'var(--border-primary)' }}>
+            <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>{title}</h3>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md"
+              className="hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md"
+              style={{ color: 'var(--text-secondary)' }}
             >
               <svg
                 className="h-6 w-6"

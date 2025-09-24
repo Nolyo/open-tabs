@@ -36,7 +36,8 @@ export function SearchBar({
           value && (
             <button
               onClick={onClear}
-              className="text-gray-400 hover:text-gray-600 focus:outline-none"
+              className="hover:text-gray-600 focus:outline-none"
+              style={{ color: 'var(--text-tertiary)' }}
             >
               <svg
                 className="h-5 w-5"
