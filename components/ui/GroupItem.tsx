@@ -34,10 +34,10 @@ export function GroupItem({
       <div className="flex-1 min-w-0">
         <div className="flex items-center space-x-2">
           <h3 className="text-sm font-semibold text-gray-900 truncate">
-            {group.title}
+            {group.name || group.title}
           </h3>
           <span className="text-xs text-gray-500">
-            ({group.tabs.length})
+            ({group.urls?.length || group.tabs?.length || 0})
           </span>
         </div>
         {group.collapsed && (

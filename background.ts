@@ -215,6 +215,48 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         .then(sendResponse)
         .catch(error => sendResponse({ error: error.message }))
       return true
+
+    case 'GET_GROUPS':
+      getGroups()
+        .then(sendResponse)
+        .catch(error => sendResponse({ error: error.message }))
+      return true
+
+    case 'GET_TABS':
+      getTabs(request.payload)
+        .then(sendResponse)
+        .catch(error => sendResponse({ error: error.message }))
+      return true
+
+    case 'ADD_TAB_TO_GROUP':
+      addTabToGroup(request.payload)
+        .then(sendResponse)
+        .catch(error => sendResponse({ error: error.message }))
+      return true
+
+    case 'REMOVE_TAB_FROM_GROUP':
+      removeTabFromGroup(request.payload)
+        .then(sendResponse)
+        .catch(error => sendResponse({ error: error.message }))
+      return true
+
+    case 'CLOSE_TAB':
+      closeTab(request.payload)
+        .then(sendResponse)
+        .catch(error => sendResponse({ error: error.message }))
+      return true
+
+    case 'CREATE_GROUP':
+      createTabGroup(request.payload)
+        .then(sendResponse)
+        .catch(error => sendResponse({ error: error.message }))
+      return true
+
+    case 'DELETE_GROUP':
+      deleteTabGroup(request.payload)
+        .then(sendResponse)
+        .catch(error => sendResponse({ error: error.message }))
+      return true
   }
 })
 
@@ -534,3 +576,87 @@ const restoreProfileGroups = async (groups: ProfileGroup[], windowId: number) =>
 
   return firstCreatedTabId
 }
+
+const getGroups = async () => {
+  const groups = await storage.get<TabGroup[]>('groups') || []
+  return { groups }
+}
+
+const getTabs = async ({ groupId }: { groupId?: string }) => {
+  const groups = await storage.get<TabGroup[]>('groups') || []
+
+  if (groupId) {
+    const group = groups.find(g => g.id === groupId)
+    return { tabs: group ? group.urls : [] }
+  }
+
+  // Retourner tous les onglets de tous les groupes
+  const allTabs = groups.flatMap(group => group.urls)
+  return { tabs: allTabs }
+}
+
+const addTabToGroup = async ({ tabId, groupId }: { tabId: string; groupId: string }) => {
+  const groups = await storage.get<TabGroup[]>('groups') || []
+  const group = groups.find(g => g.id === groupId)
+
+  if (!group) {
+    throw new Error('Group not found')
+  }
+
+  // Ici on pourrait ajouter la logique pour ajouter un onglet existant à un groupe
+  // Pour l'instant, on retourne un succès
+  return { success: true }
+}
+
+const removeTabFromGroup = async ({ tabId }: { tabId: string }) => {
+  const groups = await storage.get<TabGroup[]>('groups') || []
+
+  // Supprimer l'onglet de tous les groupes
+  groups.forEach(group => {
+    group.urls = group.urls.filter(url => url.id !== tabId)
+  })
+
+  await storage.set('groups', groups)
+  return { success: true }
+}
+
+const closeTab = async ({ tabId }: { tabId: string }) => {
+  // Essayer de fermer l'onglet par son ID
+  try {
+    const numericId = parseInt(tabId)
+    if (!isNaN(numericId)) {
+      await chrome.tabs.remove(numericId)
+    }
+  } catch (error) {
+    // Ignorer les erreurs si l'onglet n'existe plus
+  }
+  return { success: true }
+}
+
+const createTabGroup = async ({ title, color }: { title: string; color: string }) => {
+  const groups = await storage.get<TabGroup[]>('groups') || []
+  const newGroup: TabGroup = {
+    id: generateId(),
+    name: title,
+    color,
+    urls: [],
+    createdAt: new Date(),
+    updatedAt: new Date()
+  }
+
+  groups.push(newGroup)
+  await storage.set('groups', groups)
+
+  return { group: newGroup }
+}
+
+const deleteTabGroup = async ({ groupId }: { groupId: string }) => {
+  const groups = await storage.get<TabGroup[]>('groups') || []
+  const filteredGroups = groups.filter(g => g.id !== groupId)
+
+  if (filteredGroups.length === groups.length) {
+    throw new Error('Group not found')
+  }
+
+  await storage.set('groups', filteredGroups)
+  return { success: true }

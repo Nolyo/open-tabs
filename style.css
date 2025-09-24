@@ -20,6 +20,7 @@
   --bg-primary: #1a1a1a;
   --bg-secondary: #2d2d2d;
   --bg-tertiary: #363636;
+  --bg-card: #404040;
   --text-primary: #ffffff;
   --text-secondary: #cccccc;
   --text-tertiary: #999999;
@@ -31,6 +32,10 @@
   --accent-yellow: #fdd663;
   --shadow: rgba(0, 0, 0, 0.3);
   --shadow-hover: rgba(0, 0, 0, 0.4);
+}
+
+:root {
+  --bg-card: #ffffff;
 }
 
 /* Styles de base */

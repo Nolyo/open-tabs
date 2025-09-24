@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react'
-import { useTabManagement } from '~/hooks'
+import React, { useState } from 'react'
+import { useStorage } from '~/hooks/useStorage'
 import { GroupItem } from '~/components/ui/GroupItem'
-import { TabList } from '~/components/ui/TabList'
 import { Button } from '~/components/ui/Button'
 import { Modal } from '~/components/ui/Modal'
 import { Input } from '~/components/ui/Input'
@@ -10,39 +9,20 @@ import { notificationService } from '~/hooks/services'
 import { GROUP_COLORS } from '~/constants'
 
 export function TabGroupManager() {
-  const {
-    tabs,
-    groups,
-    activeGroup,
-    setActiveGroup,
-    refreshTabs,
-    refreshGroups,
-    addTabToGroup,
-    removeTabFromGroup,
-    closeTab,
-    createGroup,
-    deleteGroup,
-  } = useTabManagement()
+  const { groups, createGroup: createStorageGroup, deleteGroup: deleteStorageGroup } = useStorage()
 
+  const [activeGroup, setActiveGroup] = useState<string | null>(null)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
   const [newGroupColor, setNewGroupColor] = useState<keyof typeof GROUP_COLORS>('blue')
   const [isLoading, setIsLoading] = useState(false)
-
-  useEffect(() => {
-    refreshGroups()
-  }, [refreshGroups])
-
-  useEffect(() => {
-    refreshTabs()
-  }, [activeGroup, refreshTabs])
 
   const handleCreateGroup = async () => {
     if (!newGroupName.trim()) return
 
     setIsLoading(true)
     try {
-      await createGroup(newGroupName, newGroupColor)
+      await createStorageGroup(newGroupName, newGroupColor)
       setIsCreateModalOpen(false)
       setNewGroupName('')
       setNewGroupColor('blue')
@@ -58,7 +38,7 @@ export function TabGroupManager() {
     if (!confirm('Êtes-vous sûr de vouloir supprimer ce groupe ?')) return
 
     try {
-      await deleteGroup(groupId)
+      await deleteStorageGroup(groupId)
       notificationService.success('Groupe supprimé', 'Le groupe a été supprimé avec succès')
     } catch (error) {
       notificationService.error('Erreur', 'Impossible de supprimer le groupe')
@@ -96,20 +76,6 @@ export function TabGroupManager() {
         <div className="space-y-3">
           <h3 className="text-sm font-medium text-gray-700">Groupes</h3>
           <div className="space-y-2 max-h-96 overflow-y-auto">
-            <button
-              onClick={() => setActiveGroup(null)}
-              className={`w-full text-left p-3 rounded-md transition-colors ${
-                activeGroup === null
-                  ? 'bg-blue-50 text-blue-900 border-l-4 border-blue-500'
-                  : 'hover:bg-gray-50'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-medium">Tous les onglets</span>
-                <span className="text-sm text-gray-500">{tabs.length}</span>
-              </div>
-            </button>
-
             {groups.map((group) => (
               <GroupItem
                 key={group.id}
@@ -126,22 +92,38 @@ export function TabGroupManager() {
         <div className="md:col-span-2">
           <div className="space-y-3">
             <h3 className="text-sm font-medium text-gray-700">
-              {activeGroup ? 'Onglets du groupe' : 'Tous les onglets'}
+              {activeGroup
+                ? `Onglets du groupe: ${groups.find(g => g.id === activeGroup)?.name || ''}`
+                : 'Sélectionnez un groupe pour voir ses onglets'
+              }
             </h3>
-            {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <LoadingSpinner size="lg" />
+            {activeGroup && (
+              <div className="space-y-2">
+                {groups.find(g => g.id === activeGroup)?.urls.map((url) => (
+                  <div key={url.id} className="flex items-center justify-between p-3 border rounded-md">
+                    <div className="flex items-center space-x-3">
+                      {url.favicon && (
+                        <img
+                          src={url.favicon}
+                          alt=""
+                          className="w-4 h-4 flex-shrink-0"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none'
+                          }}
+                        />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {url.title || url.url}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate">
+                          {url.url}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ) : (
-              <TabList
-                tabs={tabs}
-                onTabClose={closeTab}
-                onTabContextMenu={(e, tabId) => {
-                  e.preventDefault()
-                  console.log('Context menu for tab:', tabId)
-                }}
-                showGroupHeaders={false}
-              />
             )}
           </div>
         </div>

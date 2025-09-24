@@ -38,7 +38,7 @@ export function useTabManagement(): UseTabManagementReturn {
   const refreshTabs = useCallback(async () => {
     try {
       const response = await chrome.runtime.sendMessage({
-        type: 'GET_TABS',
+        action: 'GET_TABS',
         payload: { groupId: activeGroup },
       })
       setTabs(response.tabs || [])
@@ -50,7 +50,7 @@ export function useTabManagement(): UseTabManagementReturn {
   const refreshGroups = useCallback(async () => {
     try {
       const response = await chrome.runtime.sendMessage({
-        type: 'GET_GROUPS',
+        action: 'GET_GROUPS',
       })
       setGroups(response.groups || [])
     } catch (error) {
@@ -61,7 +61,7 @@ export function useTabManagement(): UseTabManagementReturn {
   const addTabToGroup = useCallback(async (tabId: string, groupId: string) => {
     try {
       await chrome.runtime.sendMessage({
-        type: 'ADD_TAB_TO_GROUP',
+        action: 'ADD_TAB_TO_GROUP',
         payload: { tabId, groupId },
       })
       await refreshTabs()
@@ -73,7 +73,7 @@ export function useTabManagement(): UseTabManagementReturn {
   const removeTabFromGroup = useCallback(async (tabId: string) => {
     try {
       await chrome.runtime.sendMessage({
-        type: 'REMOVE_TAB_FROM_GROUP',
+        action: 'REMOVE_TAB_FROM_GROUP',
         payload: { tabId },
       })
       await refreshTabs()
@@ -85,7 +85,7 @@ export function useTabManagement(): UseTabManagementReturn {
   const closeTab = useCallback(async (tabId: string) => {
     try {
       await chrome.runtime.sendMessage({
-        type: 'CLOSE_TAB',
+        action: 'CLOSE_TAB',
         payload: { tabId },
       })
       await refreshTabs()
@@ -97,7 +97,7 @@ export function useTabManagement(): UseTabManagementReturn {
   const createGroup = useCallback(async (title: string, color: string) => {
     try {
       await chrome.runtime.sendMessage({
-        type: 'CREATE_GROUP',
+        action: 'CREATE_GROUP',
         payload: { title, color },
       })
       await refreshGroups()
@@ -109,7 +109,7 @@ export function useTabManagement(): UseTabManagementReturn {
   const deleteGroup = useCallback(async (groupId: string) => {
     try {
       await chrome.runtime.sendMessage({
-        type: 'DELETE_GROUP',
+        action: 'DELETE_GROUP',
         payload: { groupId },
       })
       await refreshGroups()

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react'
 
 import './options.css'
+import './style.css'
 
 import {
   ImportExportManager,

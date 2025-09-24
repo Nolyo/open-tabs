@@ -36,50 +36,28 @@ export function ProfileManager() {
     setSnapshot,
   } = useProfiles()
 
-  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false)
-  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
   const [profileName, setProfileName] = useState('')
   const [profileDescription, setProfileDescription] = useState('')
-  const [profileToDelete, setProfileToDelete] = useState<ProfileSummary | null>(null)
   const [expandedProfileId, setExpandedProfileId] = useState<string | null>(null)
 
   const defaultProfileName = useMemo(() => {
     return `Session du ${new Date().toLocaleString()}`
   }, [snapshot?.meta?.tabCount])
 
-  useEffect(() => {
-    if (!selectedProfileId) return
-
-    const profile = profiles.find(item => item.id === selectedProfileId)
-    if (!profile) return
-
-    setProfileName(profile.name)
-    setProfileDescription(profile.description || '')
-  }, [selectedProfileId, profiles])
-
+  
   const handleCapture = async () => {
     const result = await captureCurrentState()
     if (!result) return
 
-    setSelectedProfileId(null)
     setProfileName(defaultProfileName)
     setProfileDescription('')
-    setIsSaveModalOpen(true)
     notificationService.info('Capture réalisée', `Groupes détectés: ${result.meta.groupCount}`)
   }
 
   const handlePrepareUpdate = (profile: Profile, captureFreshState = false) => {
-    const prepareModal = (useSnapshot = false) => {
-      setSelectedProfileId(profile.id)
-      setProfileName(profile.name)
-      setProfileDescription(profile.description || '')
-      setIsSaveModalOpen(true)
-    }
-
     if (captureFreshState) {
       captureCurrentState().then(currentSnapshot => {
         if (!currentSnapshot) return
-        prepareModal(false)
         notificationService.info('Capture prête', 'La sauvegarde écrasera ce profil')
       })
       return
@@ -92,7 +70,8 @@ export function ProfileManager() {
         tabCount: profile.groups.reduce((total, group) => total + group.tabs.length, 0),
       },
     })
-    prepareModal(true)
+    setProfileName(profile.name)
+    setProfileDescription(profile.description || '')
   }
 
   const handleSaveProfile = async () => {
@@ -109,7 +88,7 @@ export function ProfileManager() {
 
     try {
       await saveProfile({
-        profileId: selectedProfileId || undefined,
+        profileId: undefined,
         name,
         description: profileDescription.trim() || undefined,
         groups: snapshot.groups,
@@ -117,11 +96,9 @@ export function ProfileManager() {
 
       notificationService.success(
         'Profil enregistré',
-        selectedProfileId ? 'Profil mis à jour avec succès.' : 'Nouveau profil créé.'
+        'Nouveau profil créé.'
       )
 
-      setIsSaveModalOpen(false)
-      setSelectedProfileId(null)
       setProfileName('')
       setProfileDescription('')
     } catch (saveError) {
@@ -129,18 +106,7 @@ export function ProfileManager() {
     }
   }
 
-  const handleDeleteProfile = async () => {
-    if (!profileToDelete) return
-
-    try {
-      await deleteProfile(profileToDelete.id)
-      notificationService.success('Profil supprimé', `Le profil "${profileToDelete.name}" a été supprimé.`)
-      setProfileToDelete(null)
-    } catch (deleteError) {
-      console.error('Erreur suppression profil:', deleteError)
-    }
-  }
-
+  
   const handleOpenProfile = async (profileId: string, options?: { openInNewWindow?: boolean }) => {
     try {
       await openProfile(profileId, options)
@@ -228,53 +194,6 @@ export function ProfileManager() {
                 placeholder="Notes, contexte ou objectif de cette session"
               />
 
-              {summaries.length > 0 && (
-                <div className="space-y-1">
-                  <label className="block text-sm font-medium text-gray-700">Écraser un profil existant</label>
-                  <select
-                    className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-black shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    style={{
-                      color: '#000000',
-                      backgroundColor: '#ffffff',
-                      WebkitAppearance: 'none',
-                      MozAppearance: 'none',
-                      appearance: 'none'
-                    }}
-                    value={selectedProfileId || ''}
-                    onChange={(event) => {
-                      const value = event.target.value || null
-                      setSelectedProfileId(value)
-                      if (!value) {
-                        setProfileName(defaultProfileName)
-                        setProfileDescription('')
-                        return
-                      }
-                      const profile = profiles.find(item => item.id === value)
-                      if (profile) {
-                        setProfileName(profile.name)
-                        setProfileDescription(profile.description || '')
-                      }
-                    }}
-                  >
-                    <option value="" style={{
-                      color: '#374151',
-                      backgroundColor: '#ffffff',
-                      fontWeight: 'normal',
-                      padding: '8px 12px'
-                    }}>Nouvelle sauvegarde</option>
-                    {summaries.map(summary => (
-                      <option key={summary.id} value={summary.id} style={{
-                        color: '#111827',
-                        backgroundColor: '#ffffff',
-                        fontWeight: 'normal',
-                        padding: '8px 12px'
-                      }}>
-                        {summary.name} ({summary.tabCount} onglet{summary.tabCount > 1 ? 's' : ''})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
             </div>
 
             <div className="flex items-center justify-between">
@@ -286,13 +205,6 @@ export function ProfileManager() {
               </button>
 
               <div className="flex items-center gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setIsSaveModalOpen(true)}
-                >
-                  Ajuster avant sauvegarde
-                </Button>
                 <Button
                   variant="primary"
                   size="sm"
@@ -307,20 +219,20 @@ export function ProfileManager() {
         )}
       </div>
 
-      <div className="rounded-lg border border-gray-200 bg-white">
-        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-2 text-sm text-gray-600">
-          <span className="font-medium text-gray-800">Profils enregistrés</span>
+      <div className="rounded-lg border border-gray-200 bg-white" style={{ backgroundColor: 'var(--bg-card)' }}>
+        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
+          <span className="font-medium" style={{ color: 'var(--text-primary)' }}>Profils enregistrés</span>
           <span>{summaries.length} profil{summaries.length > 1 ? 's' : ''}</span>
         </div>
 
         {isLoading ? (
           <div className="flex items-center justify-center py-8"><LoadingSpinner /></div>
         ) : summaries.length === 0 ? (
-          <div className="px-4 py-5 text-sm text-gray-500">
+          <div className="px-4 py-5 text-sm" style={{ color: 'var(--text-tertiary)' }}>
             Aucun profil enregistré pour le moment. Capturez vos onglets pour créer votre première sauvegarde.
           </div>
         ) : (
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-gray-100" style={{ borderColor: 'var(--border-primary)' }}>
             {summaries.map(summary => {
               const profile = profiles.find(item => item.id === summary.id)
               const isExpanded = expandedProfileId === summary.id
@@ -350,53 +262,63 @@ export function ProfileManager() {
                         <span>MàJ {formatDateTime(summary.updatedAt)}</span>
                       </div>
                     </div>
-                    <div className="flex flex-col items-end gap-2">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
                       <Button
                         variant="primary"
                         size="sm"
                         onClick={() => handleOpenProfile(summary.id)}
                         isLoading={isOpening}
+                        className="min-w-[80px]"
                       >
                         Ouvrir
                       </Button>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => handleOpenProfile(summary.id, { openInNewWindow: true })}
-                        isLoading={isOpening}
-                      >
-                        Nouvelle fenêtre
-                      </Button>
-                      {profile && (
+                      <div className="flex gap-1">
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handlePrepareUpdate(profile, false)}
-                          disabled={isSaving || isCapturing}
+                          onClick={() => handleOpenProfile(summary.id, { openInNewWindow: true })}
+                          isLoading={isOpening}
+                          title="Ouvrir dans une nouvelle fenêtre"
                         >
-                          Modifier…
+                          🪟
                         </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          const profile = profiles.find(item => item.id === summary.id)
-                          if (!profile) return
-                          handlePrepareUpdate(profile, true)
-                        }}
-                        disabled={isCapturing}
-                      >
-                        Actualiser depuis le navigateur
-                      </Button>
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        onClick={() => setProfileToDelete(summary)}
-                        disabled={isDeleting}
-                      >
-                        Supprimer
-                      </Button>
+                        {profile && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handlePrepareUpdate(profile, false)}
+                            disabled={isSaving || isCapturing}
+                            title="Modifier le profil"
+                          >
+                            ✏️
+                          </Button>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const profile = profiles.find(item => item.id === summary.id)
+                            if (!profile) return
+                            handlePrepareUpdate(profile, true)
+                          }}
+                          disabled={isCapturing}
+                          title="Actualiser depuis le navigateur"
+                        >
+                          🔄
+                        </Button>
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          onClick={async () => {
+                            await deleteProfile(summary.id)
+                            notificationService.success('Profil supprimé', `Le profil "${summary.name}" a été supprimé.`)
+                          }}
+                          disabled={isDeleting}
+                          title="Supprimer le profil"
+                        >
+                          🗑️
+                        </Button>
+                      </div>
                     </div>
                   </div>
 
@@ -428,75 +350,6 @@ export function ProfileManager() {
         )}
       </div>
 
-      <Modal
-        isOpen={isSaveModalOpen}
-        onClose={() => setIsSaveModalOpen(false)}
-        title={selectedProfileId ? 'Mettre à jour le profil' : 'Nouveau profil'}
-        size="md"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            Ajoutez un titre et un contexte pour retrouver rapidement vos sessions sauvegardées.
-          </p>
-
-          <Input
-            label="Nom du profil"
-            value={profileName}
-            onChange={(event) => setProfileName(event.target.value)}
-            placeholder="Routine quotidienne, Analyse concurrentielle, ..."
-          />
-
-          <Input
-            label="Description"
-            value={profileDescription}
-            onChange={(event) => setProfileDescription(event.target.value)}
-            placeholder="Notes supplémentaires (optionnel)"
-          />
-
-          {snapshot && (
-            <div className="rounded-md border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
-              <p className="font-medium text-gray-800">Capture active</p>
-              <p>{snapshot.meta.groupCount} groupe{snapshot.meta.groupCount > 1 ? 's' : ''} / {snapshot.meta.tabCount} onglet{snapshot.meta.tabCount > 1 ? 's' : ''}</p>
-            </div>
-          )}
-
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setIsSaveModalOpen(false)} size="sm">
-              Fermer
-            </Button>
-            <Button variant="primary" onClick={handleSaveProfile} size="sm" isLoading={isSaving}>
-              Enregistrer
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        isOpen={Boolean(profileToDelete)}
-        onClose={() => setProfileToDelete(null)}
-        title="Supprimer le profil"
-        size="sm"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            Êtes-vous sûr de vouloir supprimer le profil « {profileToDelete?.name} » ? Cette action est irréversible.
-          </p>
-
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setProfileToDelete(null)}>
-              Annuler
-            </Button>
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={handleDeleteProfile}
-              isLoading={isDeleting}
-            >
-              Supprimer
-            </Button>
-          </div>
-        </div>
-      </Modal>
-    </section>
+      </section>
   )
 }
